@@ -71,8 +71,11 @@ If the file does not exist on first start, the module generates a default config
 | `EyeGain` | All `1` | Gain for the gaze X and Y axes and eye openness, set separately for each eye |
 | `AllowFallback` | `false` | Whether to switch to the other source when the current one becomes unavailable |
 | `Streaming.LocalOnly` | `true` | Accept streaming data only from the local machine. PICO Connect runs locally, so this normally does not need to be changed |
+| `Tongue.Enabled` / `Tongue.Port` | `true` / `45682` | Receive PC tongue results on IPv4 loopback only when this module owns face output |
 
 For the complete list of fields, valid ranges and defaults, see the [configuration reference](docs/configuration.md).
+
+The `feat/tongue-pc` branch supports the paired PC tongue app. See [PC tongue setup and protocol](TONGUE.md) for building, output ownership, expiry and offline checks. It does not use the older headset UDP19031 protocol.
 
 Bridge also sends Blink data when only eye tracking is enabled; face output can remain disabled.
 

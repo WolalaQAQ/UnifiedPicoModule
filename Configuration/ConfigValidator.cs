@@ -17,6 +17,8 @@ public static class ConfigValidator
         { log($"ConfigVersion={config.ConfigVersion} 未知；使用安全默认。"); config = new ModuleConfig(); }
         if (!Enum.IsDefined(config.Source)) { log($"Source={config.Source} 未知；使用 Auto。"); config.Source = SourceSelection.Auto; }
         config.Bridge ??= new(); config.Streaming ??= new(); config.Stale ??= new(); config.EyeGain ??= new(); config.PostProcessing ??= new();
+        config.Tongue ??= new();
+        config.Tongue.Port = Integer(config.Tongue.Port, 1, 65535, 45682, "Tongue.Port", log);
         config.Bridge.IP = Address(config.Bridge.IP, null, "Bridge.IP", log);
         config.Streaming.IP = Address(config.Streaming.IP, null, "Streaming.IP", log);
         config.Bridge.ListenAddress = Address(config.Bridge.ListenAddress, "0.0.0.0", "Bridge.ListenAddress", log)!;

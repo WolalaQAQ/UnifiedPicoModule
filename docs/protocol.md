@@ -2,7 +2,7 @@
 
 English | [简体中文](protocol_zh.md) · [README](../README.md)
 
-This document describes the four UDP wire formats the module can decode and how the module connects to each sender. The source code in `Protocol/`, `Transport/`, `Mapping/` and `Runtime/` is authoritative; it is not included in the module ZIP. For the full list of configuration fields, see the [configuration reference](configuration.md).
+This document describes the four main UDP tracking formats and how the module connects to each sender. The additional loopback TJR1 tongue-result stream is specified in [PC tongue results](../TONGUE.md#tjr1-wire-format). The source code in `Protocol/`, `Transport/`, `Mapping/` and `Runtime/` is authoritative; it is not included in the module ZIP. For the full list of configuration fields, see the [configuration reference](configuration.md).
 
 The module implements these formats independently. For sources and licensing, see the [third-party notices](../THIRD_PARTY_NOTICES.md).
 

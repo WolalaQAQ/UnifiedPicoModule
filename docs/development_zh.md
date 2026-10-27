@@ -234,6 +234,10 @@ dotnet tools/ConfigTool/bin/Release/net10.0/UnifiedPicoConfigTool.dll defaults <
 
 该命令不会覆盖已有文件，输出路径需要是尚不存在的文件。
 
+## PC舌头检查
+
+构建固定SDK后运行`./tools/test-tongue.ps1`，使用临时环回socket测试生产接收器及SDK所有权，不安装或启动宿主。配套App与跨语言互通见[PC舌头开发说明](../TONGUE_zh.md)。
+
 ## 参与开发
 
 参与方式请参阅[参与贡献](../CONTRIBUTING_zh.md)。构建通过只表示代码可以编译，与设备、发送端版本或 Avatar 的兼容性需要另行在真机上确认。

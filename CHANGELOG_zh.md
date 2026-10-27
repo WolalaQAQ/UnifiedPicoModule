@@ -2,6 +2,20 @@
 
 [English](CHANGELOG.md) | 简体中文
 
+## [Unreleased] - 2026-10-28
+
+### 新增
+- 在环回UDP45682接收PC本机TJR1舌头结果，用`Tongue.Enabled`／`Tongue.Port`配置。
+- 增加生产接收器、SDK所有权、生命周期及真实Python编码器互通测试。
+
+### 设计理由
+- 视频、推理与个人流程由配套PicoET PC App完成，嘴部所有权留给VRCFT，SDK仍从模块原Write边界写入。
+- 新鲜absent为明确负例；invalid／stop／过期恢复当前原厂Out并清Left／Right，源年龄、sensor时间与序号阻止旧图续期。
+
+### 注意事项
+- 混搭只眼动时不占舌头端口、不写外部嘴部；不提供Up／Down、UDP19031订阅或原厂／模型最大值合并。
+- 本次为开发源码整合，真人校准、个人模型准确性及Avatar表现留待实测。SDK依赖与正式版本元数据不变。
+
 ## [0.4.0] - 2026-10-17
 
 ### 新增

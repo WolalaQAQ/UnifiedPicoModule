@@ -71,8 +71,11 @@ PICO 头显的追踪数据可以通过多种发送端输出，包括 PicoFacialB
 | `EyeGain` | 均为 `1` | 分别设置左右眼视线 X、Y 轴与睁眼度的增益 |
 | `AllowFallback` | `false` | 当前数据源不可用时，是否切换到另一数据源 |
 | `Streaming.LocalOnly` | `true` | 仅接受本机发出的串流数据。PICO Connect 在本机运行，通常无需修改 |
+| `Tongue.Enabled` / `Tongue.Port` | `true` / `45682` | 仅当本模块拥有面部输出权时，从IPv4环回地址接收PC舌头结果 |
 
 完整的字段说明、取值范围和默认值请参阅[配置说明](docs/configuration_zh.md)。
+
+`feat/tongue-pc`分支支持配套PC舌头App，构建、输出所有权、过期与离线检查见[PC舌头说明](TONGUE_zh.md)。不使用旧头显UDP19031协议。
 
 只开启眼动时，Bridge 也会发送 Blink 数据，无需开启面部输出。
 

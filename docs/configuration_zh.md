@@ -34,6 +34,7 @@
 | `DisableFaceTracking` | 布尔 | `false` | | 禁用面部表情输出 |
 | `Bridge` | 对象 | 见 [Bridge](#bridge) | | PicoFacialBridge 与 PicoFacialDataDaemon 的接收设置（9030 端口） |
 | `Streaming` | 对象 | 见 [Streaming](#streaming) | | 串流格式的接收设置（29765、29763 端口） |
+| `Tongue` | 对象 | 见 [Tongue](#tongue) | | IPv4环回地址上的PC舌头结果 |
 | `EyeGain` | 对象 | 各项均为 `1` | | 左右眼视线与睁眼度的增益 |
 | `Stale` | 对象 | 见 [Stale](#stale) | | 数据过期判定与中性瞳孔值 |
 | `AllowFallback` | 布尔 | `false` | | 当前数据源不可用时是否整体切换到另一数据源 |
@@ -133,6 +134,10 @@ Streaming 接收器处理 PICO Connect 等发送端的串流格式。端口固�
 六个字段必须全部提供。任一字段缺失或越界时，整个 `HeaderProfile` 按 `null` 处理并记录日志，接收回到上文的默认判定，29763 端口的接收不受影响。
 
 配置完整的 `HeaderProfile` 后，29765 数据报除需满足长度与 `trackingType` 条件外，六个头部字段还必须与配置完全一致。模块不会重组分包数据。头部字段的偏移请参阅[协议参考](protocol_zh.md#streamingheader16-头部)。
+
+## Tongue
+
+`Enabled`默认`true`；`Port`默认`45682`，范围1–65535，非法值回退45682。绑定地址始终为`127.0.0.1`，只有本模块拥有面部输出权时才打开接收器。省略时采用默认值，不改写已有文件。PC舌头结果始终在最多350ms后过期，不受`Stale.NeutralizeOnTimeout`影响。详见[PC舌头说明](../TONGUE_zh.md)。
 
 ## 眼动解析与增益
 

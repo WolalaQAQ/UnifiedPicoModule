@@ -34,6 +34,7 @@ Personal configurations and migration reports can contain IP addresses or local 
 | `DisableFaceTracking` | boolean | `false` | | Disables expression output |
 | `Bridge` | object | see [Bridge](#bridge) | | Receiver settings for PicoFacialBridge and PicoFacialDataDaemon (port 9030) |
 | `Streaming` | object | see [Streaming](#streaming) | | Receiver settings for streaming formats (ports 29765 and 29763) |
+| `Tongue` | object | see [Tongue](#tongue) | | PC tongue results on IPv4 loopback |
 | `EyeGain` | object | all `1` | | Gain for gaze and openness of each eye |
 | `Stale` | object | see [Stale](#stale) | | Data expiry and the neutral pupil value |
 | `AllowFallback` | boolean | `false` | | Whether to switch entirely to the other source when the current one becomes unavailable |
@@ -133,6 +134,10 @@ Once a session is established, the module locks onto the address and port of the
 All six fields are required. If any field is missing or out of range, the whole `HeaderProfile` is treated as `null` and the problem is logged; reception returns to the default acceptance described above, and port 29763 is not affected.
 
 With a complete `HeaderProfile`, a 29765 datagram must meet the length and `trackingType` conditions and, in addition, all six header fields must match the configured values exactly. The module does not reassemble fragmented data. For the header field offsets, see the [protocol reference](protocol.md#streamingheader16-header).
+
+## Tongue
+
+`Enabled` defaults to `true`. `Port` defaults to `45682`, accepts 1–65535, and falls back to 45682 for invalid values. The address is always `127.0.0.1`; the receiver opens only when this module owns face output. Missing settings use these defaults without rewriting an existing file. PC tongue results always expire within 350 ms, independently of `Stale.NeutralizeOnTimeout`. See [PC tongue setup and protocol](../TONGUE.md).
 
 ## Eye resolution and gain
 

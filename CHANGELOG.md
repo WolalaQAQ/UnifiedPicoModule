@@ -2,6 +2,20 @@
 
 English | [简体中文](CHANGELOG_zh.md)
 
+## [Unreleased] - 2026-10-28
+
+### Features
+- Accept PC-local TJR1 tongue results on loopback UDP45682, configurable through `Tongue.Enabled` / `Tongue.Port`.
+- Add production receiver, SDK ownership, lifecycle and actual Python encoder interoperability tests.
+
+### Design Rationale
+- Move video, inference and personalization to the paired PicoET PC app. Keep mouth ownership in VRCFT and SDK writes in the module's existing Write boundary.
+- Make fresh absent authoritative; invalid/stop/expiry restore the current native Out and clear Left/Right. Source age, sensor time and sequence prevent old images from renewing output.
+
+### Notes & Caveats
+- Eye-only mixed tracking opens no tongue socket and writes no foreign mouth fields. No Up/Down, UDP19031 subscription or native/model maximum merge is included.
+- Development source integration; worn calibration, personal-model accuracy and Avatar behavior remain live-test work. SDK dependency and published version metadata remain unchanged.
+
 ## [0.4.0] - 2026-10-17
 
 ### Features

@@ -3,6 +3,10 @@
   "Source": "Auto",
   "DisableEyeTracking": false,
   "DisableFaceTracking": false,
+  "Tongue": {
+    "Enabled": true,
+    "Port": 45682
+  },
   "Bridge": {
     "IP": null,
     "ListenAddress": "0.0.0.0",

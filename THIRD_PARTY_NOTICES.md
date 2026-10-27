@@ -18,6 +18,15 @@ The module package includes the full MIT license text. This license applies only
 
 ## Reference sources
 
+### PC tongue integration
+
+The development TJR1 receiver replaces the headset receiver proposed in
+[Rulez777's PR #1](https://github.com/WolalaQAQ/UnifiedPicoModule/pull/1), reviewed
+at `f91d18d46e5661ea9e205eee9d854d965c4c99bc`. Its loopback wire format, source-age
+state machine and lifecycle tests are this project's implementation. The old
+`Sdk/TongueReceiver.cs` and TNG2 subscription are not copied. The paired
+PicoET-Enhance PC app documents its model/code attribution in its own repository.
+
 This project is an independent implementation. It does not copy the unclear-license code from SAFT or lonelyicer, and it does not work around licensing requirements by renaming, translating or AI-rewriting that code. Neither the implementations nor the images from SAFT and lonelyicer are included in this project. Renaming, translating or AI-rewriting does not constitute a license.
 
 The assessments in this section apply only to the snapshots that were reviewed. They do not claim that the authors have never granted a license through other channels.

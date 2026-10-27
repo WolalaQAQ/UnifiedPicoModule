@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using UnifiedPicoModule.Configuration;
 using UnifiedPicoModule.Core;
 using UnifiedPicoModule.Runtime;
+using UnifiedPicoModule.Transport;
 using VRCFaceTracking;
 using VRCFaceTracking.Core.Library;
 using VRCFaceTracking.Core.Params.Expressions;
@@ -22,6 +23,8 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
     private bool timerPolicyChanged, timerPolicyAttempted;
     private PowerThrottlingState previousTimerPolicy;
     private double lastError;
+    private TongueReceiver? tongue;
+    private TjrUdpReceiver? tongueTransport;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct PowerThrottlingState { public uint Version, ControlMask, StateMask; }
@@ -128,6 +131,7 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
         {
             HonorTimerResolution();
             coordinator = new(config, Log);
+            StartTongue();
             wasActive = true;
         }
         catch
@@ -155,8 +159,33 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
     }
     private void StopSources()
     {
-        try { coordinator?.Dispose(); }
-        finally { coordinator = null; RestoreTimerPolicy(); }
+        try { StopTongue(); }
+        finally
+        {
+            try { coordinator?.Dispose(); }
+            finally { coordinator = null; RestoreTimerPolicy(); }
+        }
+    }
+    private void StartTongue()
+    {
+        if (!ownsFace || !config.Tongue.Enabled) return;
+        var receiver = new TongueReceiver();
+        try
+        {
+            tongueTransport = new(receiver, config.Tongue.Port, log: Log);
+            tongue = receiver;
+            Log($"Tongue TJR1: listening on 127.0.0.1:{tongueTransport.Port}; PC app output, expiry350ms.");
+        }
+        catch (System.Net.Sockets.SocketException error)
+        {
+            receiver.Dispose();
+            Log($"Tongue TJR1 unavailable; normal PICO tracking continues: {error.Message}");
+        }
+    }
+    private void StopTongue()
+    {
+        try { tongueTransport?.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+        finally { tongueTransport = null; tongue?.Dispose(); tongue = null; }
     }
     private void RestoreTimerPolicy()
     {
@@ -186,6 +215,7 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
         var data = UnifiedTracking.Data;
         foreach (var (channel, sdk) in Channels)
             if (ExpressionFrame.IsEye(channel) ? ownsEye : ownsFace) data.Shapes[(int)sdk].Weight = output.Expressions[channel];
+        TongueSdkAdapter.Apply(tongue, data, ownsFace, output.Expressions[ExpressionChannel.TongueOut], config.LegacyExpressionCeiling);
         if (!ownsEye) return;
         data.Eye.Left.Gaze.x = output.Left.GazeX; data.Eye.Left.Gaze.y = output.Left.GazeY;
         data.Eye.Left.Openness = output.Left.Openness; data.Eye.Left.PupilDiameter_MM = output.Left.PupilMillimeters;

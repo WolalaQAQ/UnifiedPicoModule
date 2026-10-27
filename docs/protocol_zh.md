@@ -2,7 +2,7 @@
 
 [English](protocol.md) | 简体中文 · [README](../README_zh.md)
 
-本文档说明本模块能够解码的四种 UDP 线格式，以及模块与各发送端之间的连接行为。内容以 `Protocol/`、`Transport/`、`Mapping/` 和 `Runtime/` 目录中的源码为准，这些源码不随模块 ZIP 分发。配置字段的完整说明请参阅[配置说明](configuration_zh.md)。
+本文档说明四种主要UDP追踪格式，以及模块与各发送端之间的连接行为。额外的环回TJR1舌头结果见[PC舌头协议](../TONGUE_zh.md#tjr1线格式)。内容以`Protocol/`、`Transport/`、`Mapping/`和`Runtime/`目录中的源码为准，这些源码不随模块ZIP分发。配置字段完整说明见[配置说明](configuration_zh.md)。
 
 本模块独立实现上述格式。来源与许可请参阅[第三方声明](../THIRD_PARTY_NOTICES_zh.md)。
 

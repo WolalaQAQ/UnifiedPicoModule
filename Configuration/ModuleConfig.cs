@@ -10,6 +10,7 @@ public sealed class ModuleConfig
     public bool DisableFaceTracking { get; set; }
     public BridgeSettings Bridge { get; set; } = new();
     public StreamingSettings Streaming { get; set; } = new();
+    public TongueSettings Tongue { get; set; } = new();
     public EyeGainSettings EyeGain { get; set; } = new();
     public StaleSettings Stale { get; set; } = new();
     public bool AllowFallback { get; set; }
@@ -17,6 +18,11 @@ public sealed class ModuleConfig
     public bool LegacyExpressionCeiling { get; set; }
     public PostProcessingSettings PostProcessing { get; set; } = new();
     public MigrationMetadata? Migration { get; set; }
+}
+public sealed class TongueSettings
+{
+    public bool Enabled { get; set; } = true;
+    public int Port { get; set; } = 45682;
 }
 public sealed class BridgeSettings
 {

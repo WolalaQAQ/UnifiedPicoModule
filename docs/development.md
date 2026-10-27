@@ -234,6 +234,10 @@ dotnet tools/ConfigTool/bin/Release/net10.0/UnifiedPicoConfigTool.dll defaults <
 
 The command never overwrites an existing file; the output path must not exist yet.
 
+## PC tongue checks
+
+After building the pinned SDK, run `./tools/test-tongue.ps1`. It tests the production receiver and SDK ownership using ephemeral loopback sockets, without installing or starting a host. The paired app and cross-language wire test are documented in [PC tongue development](../TONGUE.md).
+
 ## Contributing
 
 See [Contributing](../CONTRIBUTING.md) for how to take part. A successful build only shows that the code compiles. Compatibility with devices, sender versions and avatars has to be confirmed separately on real hardware.

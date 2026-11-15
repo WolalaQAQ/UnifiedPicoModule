@@ -64,12 +64,24 @@ Changing the SDK version requires updating the commit and fingerprints in the sc
 | SDK assemblies | `.sdk/VRCFaceTracking.Core.dll`, `.sdk/VRCFaceTracking.SDK.dll` |
 | SDK provenance record | `.sdk/sdk-provenance.json` |
 
+### Host compatibility checks
+
+Runtime tests use the official 5.4.5 compilation source and a separate Steam 6 checkout at `3d36379253d26961560d84acecd01d509aea467a`:
+
+```powershell
+git clone https://github.com/benaclejames/VRCFaceTracking.git .sdk/compat/source/vrcft6-steam
+git -C .sdk/compat/source/vrcft6-steam switch --detach 3d36379253d26961560d84acecd01d509aea467a
+pwsh -NoProfile -File tools/test-compatibility.ps1
+```
+
+The runner uses private profiles and synthetic input to check the same module DLL against both hosts. `-ModuleDll` selects an existing DLL; `-InstalledHostDir` optionally uses matching Steam components in the isolated output. See [the test guide](../tools/CompatibilityTests/README.md). It does not use the GUI, production tracking ports or user settings.
+
 ## Project files
 
 ### UnifiedPicoModule.csproj
 
 - Targets `net10.0`, with nullable reference types and implicit usings enabled, and all warnings treated as errors.
-- The version is set by the `Version` property and is currently `0.4.0`.
+- The version is set by the `Version` property and is currently `0.4.1`.
 - References `VRCFaceTracking.SDK.dll` and `VRCFaceTracking.Core.dll` under `$(VrcftSdkDir)` through `HintPath`, with `Private=false`, so neither DLL is copied to the output directory. `VrcftSdkDir` defaults to `.sdk` in the repository and can be overridden as an MSBuild property.
 - The `CheckSdk` target checks that both DLLs exist before references are resolved and requires their assembly version to be `5.4.5.0`.
 - References `Microsoft.Extensions.Logging.Abstractions` 10.0.1 with `PrivateAssets="all"`.
@@ -93,7 +105,7 @@ The module metadata read by VRCFT contains the following fields:
 | Field | Current value or description |
 |---|---|
 | `ModuleId` | `8322e16d-c38b-42f0-8d35-68f27227b442`; also determines the module's directory name under `CustomLibs` |
-| `Version` | `0.4.0`; must match the version in `UnifiedPicoModule.csproj` |
+| `Version` | `0.4.1`; must match the version in `UnifiedPicoModule.csproj` |
 | `ModuleName` | `Unified PICO Face Tracking` |
 | `ModuleDescription` / `UsageInstructions` | Text shown in the module list |
 | `DownloadUrl` | Currently empty |
@@ -163,14 +175,14 @@ The build job runs on `windows-latest` with `contents: read` permission and perf
 2. Validate the tag format and verify that the tag version exactly matches the versions in `module.json` and `UnifiedPicoModule.csproj`.
 3. Install the .NET 10 SDK.
 4. Check out the pinned VRCFaceTracking commit into `.sdk/source/VRCFaceTracking`. The commit is recorded in the workflow's `VRCFT_COMMIT` environment variable and is verified again independently by `tools/build.ps1`.
-5. Run `tools/package.ps1 -SdkSource .sdk/source/VRCFaceTracking`.
+5. Run `tools/package.ps1 -SdkSource .sdk/source/VRCFaceTracking`, check out the separate pinned Steam 6 source and run compatibility checks for both hosts against the packaged DLL.
 6. Inspect the resulting ZIP. Entry paths must not contain `agents`, `archive`, `private`, `.sdk`, `bin` or `obj` directories or names containing `migration` or `current-settings`; the package must not contain `.log`, `.pcap`, `.pcapng`, `.har` or `.pdb` files, or any DLL other than `UnifiedPicoModule.dll`. In the default configuration inside the package, `Bridge.IP`, `Streaming.IP` and `Migration` must be empty, and no rule under `PostProcessing` other than `ChannelGain` may have `Enabled` set to `true`.
 7. Copy the ZIP to `UnifiedPicoModule-<version>.zip` without the timestamp, recompute the SHA256 and write a `.zip.sha256` file.
 8. Upload both files as a workflow artifact, retained for 14 days.
 
 ### Publish job
 
-After the build job succeeds, the publish job runs on `ubuntu-latest` with `contents: write` permission, using the `GITHUB_TOKEN` provided automatically by GitHub. It downloads both files and verifies them with `sha256sum --check --strict`, then creates the release as a draft, attaches the files, generates release notes automatically, and finally makes the draft public. If the tag has a pre-release suffix, the release is marked as a prerelease.
+After the build job succeeds, the publish job runs on `ubuntu-latest` with `contents: write` permission, using the `GITHUB_TOKEN` provided automatically by GitHub. It downloads both files and verifies them with `sha256sum --check --strict`, then creates the release as a draft, attaches the files, uses the matching version sections from both changelogs as its notes, and finally makes the draft public. If the tag has a pre-release suffix, the release is marked as a prerelease.
 
 Note the following when using this workflow:
 

@@ -1,10 +1,10 @@
 {
   "ModuleId": "8322e16d-c38b-42f0-8d35-68f27227b442",
-  "Version": "0.4.0",
+  "Version": "0.4.1",
   "AuthorName": "UnifiedPicoModule contributors",
   "ModuleName": "Unified PICO Face Tracking",
   "ModuleDescription": "PICO eye and face tracking for VRCFaceTracking, receiving data from PicoFacialBridge, PICO Connect, Streaming Assistant, or PicoFacialDataDaemon. Gaze comes from the EyeLook expression model and eyelids from 1 - EyeBlink; native eye packets supply a measured pupil diameter. Supports independent per-eye eye expressions and configurable expression processing.",
-  "UsageInstructions": "Disable older PICO tracking modules, install this module, and restart VRCFaceTracking 5.4.5. Gaze is derived from the EyeLook shapes and eyelid openness from 1 - EyeBlink for every sender. With PicoET-Enhance v2.3.0+ and PicoFacialBridge v0.5.0+, per-eye independent eye-expression X packets (v2: separate left-eye, right-eye and mouth clocks) and measured pupil diameter are supported; an invalid eye holds its own last value. EyeWide is amplified 2x; other expression corrections are off. Explicit settings in UnifiedPicoModule.json take precedence. See the README for configuration and validation details.",
+  "UsageInstructions": "Disable older PICO tracking modules, install this module, and restart VRCFaceTracking 5.4.5 or 6.0. Gaze is derived from the EyeLook shapes and eyelid openness from 1 - EyeBlink for every sender. With PicoET-Enhance v2.3.0+ and PicoFacialBridge v0.5.0+, per-eye independent eye-expression X packets (v2: separate left-eye, right-eye and mouth clocks) and measured pupil diameter are supported; an invalid eye holds its own last value. VRCFT 6 receives zero when no measured pupil is available; VRCFT 5 retains the configured neutral diameter. EyeWide is amplified 2x; other expression corrections are off. Explicit settings in UnifiedPicoModule.json take precedence. See the README for configuration and validation details.",
   "DownloadUrl": "",
   "ModulePageUrl": "https://github.com/WolalaQAQ/UnifiedPicoModule",
   "DllFileName": "UnifiedPicoModule.dll"

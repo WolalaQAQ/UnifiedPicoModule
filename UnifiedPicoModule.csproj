@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>0.4.0</Version>
+    <Version>0.4.1</Version>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <AssemblyName>UnifiedPicoModule</AssemblyName>
     <VrcftSdkDir Condition="'$(VrcftSdkDir)' == ''">$(MSBuildThisFileDirectory).sdk</VrcftSdkDir>

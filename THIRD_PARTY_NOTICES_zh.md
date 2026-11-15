@@ -142,6 +142,7 @@ SOFTWARE.
 - 作者：benaclejames
 - 仓库：https://github.com/benaclejames/VRCFaceTracking
 - 开发基线：[`7add14873e398c4095d06913cdeee7a01fc43fab`](https://github.com/benaclejames/VRCFaceTracking/tree/7add14873e398c4095d06913cdeee7a01fc43fab)，net10.0，AssemblyVersion 5.4.5.0
+- 兼容测试目标：Steam 6.0.0.0、提交 [`3d36379253d26961560d84acecd01d509aea467a`](https://github.com/benaclejames/VRCFaceTracking/tree/3d36379253d26961560d84acecd01d509aea467a)，同为 Apache-2.0；不分发宿主 DLL。
 - 许可证：Apache-2.0，见[固定提交的 LICENSE](https://github.com/benaclejames/VRCFaceTracking/blob/7add14873e398c4095d06913cdeee7a01fc43fab/LICENSE) 与 [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)
 - 版权声明：许可证的版权附录为 Copyright 2024 benaclejames
 - 用途：引用 SDK / Core 的接口。
@@ -163,7 +164,7 @@ AssemblyVersion 不能替代源码提交的固定版本，也不代表所有同�
 - 源码仓库：[dotnet/dotnet 固定提交](https://github.com/dotnet/dotnet/tree/fad253f51b461736dfd3cd9c15977bb7493becef)
 - 依赖：net10 目标依赖 `Microsoft.Extensions.DependencyInjection.Abstractions` 10.0.1
 
-模块工程以 `PrivateAssets=all` 引用该包。`PrivateAssets` 是依赖传递的设置，并不保证相关文件不会被复制，也不是许可证。模块包按文件白名单打包，不包含 logging 或其他 NuGet DLL，所需的运行时依赖由宿主提供；模块已在官方 VRCFT 5.4.5 上运行，其他宿主版本尚未测试。如改为分发这些组件，须另行核对版权、许可证与附件。Microsoft 的版权不归本项目所有。
+模块工程以 `PrivateAssets=all` 引用该包。`PrivateAssets` 是依赖传递的设置，并不保证相关文件不会被复制，也不是许可证。模块包按文件白名单打包，不包含 logging 或其他 NuGet DLL，所需的运行时依赖由宿主提供；官方 VRCFT 5.4.5 已有真人验证，Steam 6 已有隔离组件验证。如改为分发这些组件，须另行核对版权、许可证与附件。Microsoft 的版权不归本项目所有。
 
 ## 资源与后续更新
 

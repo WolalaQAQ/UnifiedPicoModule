@@ -15,6 +15,7 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
     private readonly object gate = new();
     private static readonly (ExpressionChannel Channel, UnifiedExpressions Sdk)[] Channels =
         Enum.GetValues<ExpressionChannel>().Select(c => (c, Enum.Parse<UnifiedExpressions>(c.ToString(), false))).ToArray();
+    private static readonly bool UsesNativePupilConvention = typeof(UnifiedTracking).Assembly.GetName().Version!.Major >= 6;
     private ModuleConfig config = new();
     private TrackingPipeline? pipeline;
     private SourceCoordinator? coordinator;
@@ -69,7 +70,7 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
             pipeline = new(config); diagnostics = new(Log); stopped = false;
             Status = ownsEye || ownsFace ? ModuleState.Active : ModuleState.Idle;
             if (ownsEye || ownsFace) StartSources();
-            Log("UnifiedPicoModule 0.4.0: X v1/v2; VRCFT SDK 5.4.5 / net10. UDP is unauthenticated: trusted LAN only.");
+            Log("UnifiedPicoModule 0.4.1: X v1/v2; VRCFT 5.4.5 / 6.0, SDK 5.4.5 / net10. UDP is unauthenticated: trusted LAN only.");
             return (ownsEye, ownsFace);
         }
     }
@@ -218,8 +219,12 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
         TongueSdkAdapter.Apply(tongue, data, ownsFace, output.Expressions[ExpressionChannel.TongueOut], config.LegacyExpressionCeiling);
         if (!ownsEye) return;
         data.Eye.Left.Gaze.x = output.Left.GazeX; data.Eye.Left.Gaze.y = output.Left.GazeY;
-        data.Eye.Left.Openness = output.Left.Openness; data.Eye.Left.PupilDiameter_MM = output.Left.PupilMillimeters;
+        data.Eye.Left.Openness = output.Left.Openness; data.Eye.Left.PupilDiameter_MM = SdkPupil(output.Left);
         data.Eye.Right.Gaze.x = output.Right.GazeX; data.Eye.Right.Gaze.y = output.Right.GazeY;
-        data.Eye.Right.Openness = output.Right.Openness; data.Eye.Right.PupilDiameter_MM = output.Right.PupilMillimeters;
+        data.Eye.Right.Openness = output.Right.Openness; data.Eye.Right.PupilDiameter_MM = SdkPupil(output.Right);
     }
+
+    // VRCFT 6 uses zero for an unavailable measurement. A positive placeholder
+    // would be encoded as physical dilation/constriction; retain 5.x behavior.
+    private static float SdkPupil(ResolvedEye eye) => UsesNativePupilConvention && !eye.RealPupil ? 0 : eye.PupilMillimeters;
 }

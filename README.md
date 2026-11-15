@@ -14,7 +14,7 @@ UnifiedPicoModule is a PICO eye and face tracking module for VRCFaceTracking (VR
 
 Tracking data from a PICO headset can be delivered by several senders, including PicoFacialBridge, PICO Connect, Streaming Assistant and the earlier PicoFacialDataDaemon. Each sender uses its own data format and port. This module supports all of these formats, detects which source is currently available, and forwards its data to VRCFT through a single output, so there is no need to install a separate module for each sender.
 
-> The current version is 0.4.0, built against VRCFT 5.4.5 (net10.0). See [Compatibility](#compatibility) for which combinations have been verified and the [changelog](CHANGELOG.md) for version changes.
+> The current version is 0.4.1. One DLL supports VRCFT 5.4.5 and Steam VRCFT 6.0.0.0, while remaining built against the 5.4.5 SDK (net10.0). See [Compatibility](#compatibility) for verified combinations and the [changelog](CHANGELOG.md) for version changes.
 
 ## Supported senders
 
@@ -32,7 +32,7 @@ PicoFacialBridge is the recommended sender: it provides a measured pupil diamete
 ### Requirements
 
 - Windows 10 or Windows 11
-- VRCFaceTracking 5.4.5
+- VRCFaceTracking 5.4.5 or Steam VRCFaceTracking 6.0.0.0
 - A working sender on the same local network as the PC
 - A VRChat avatar that supports face tracking
 
@@ -188,6 +188,10 @@ Make sure `DisableEyeTracking` is not enabled. Gaze is derived from the `EyeLook
 If the tongue value briefly drops to zero, enable `TongueHold`. If the tongue appears before the mouth is noticeably open, use `TongueJawGate` instead. The two rules address different problems.
 
 ## Compatibility
+
+VRCFT 6 compatibility is checked against Steam Build 26384174, commit `3d36379253d26961560d84acecd01d509aea467a`. Isolated component tests pass on official 5.4.5 and Steam 6, including native face blobs, old Avatar parameters, module loading and pupil encoding. Real Cymple/VRCFT 6 mixing and Avatar rendering have not yet been tested.
+
+VRCFT 6 uses zero to mean that no pupil measurement is available. The module sends that sentinel instead of a positive placeholder, which would otherwise appear as constriction. Real measurements keep their existing hold/expiry behavior; VRCFT 5 retains the configured neutral diameter. Native face output uses the host's existing sender and needs a compatible Avatar; no patched host is required.
 
 The following input configurations have been verified on a PICO 4 Pro:
 

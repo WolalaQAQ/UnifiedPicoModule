@@ -151,7 +151,7 @@ Missing, stale or invalid values hold that eye's last valid gaze or openness; be
 
 Independent-expression `X` packets carry a quality state per eye. A state of 0 holds only that eye's previous output; -1 is unknown and retains the supplied data. The first `X` sample for an eye replaces any previously held ordinary value instead of inheriting it, and after that the eye keeps its own latest valid value.
 
-Pupil diameter comes from native eye packets: a valid measured value between 1 and 12 mm is used when present and retained during invalidity by default. `Stale.NeutralPupilMillimeters` is used before any measurement, after an output reset, or after expiry when timeout neutralization is enabled. The module does not estimate pupil size from openness or other data.
+Pupil diameter comes from native eye packets: a valid measured value between 1 and 12 mm is used when present and retained during invalidity by default. Before any measurement, after an output reset, or after expiry with timeout neutralization enabled, VRCFT 5 uses `Stale.NeutralPupilMillimeters`; VRCFT 6 receives its unavailable-measurement sentinel 0. The module does not estimate pupil size from openness or other data.
 
 With `Source=Auto`, a native eye packet counts as usable when it contains a valid measured pupil, and shape data counts when it can produce expressions or derive gaze and openness.
 
@@ -173,11 +173,11 @@ Out-of-range or non-finite values fall back to 1. After the gain is applied, gaz
 | `NeutralizeOnTimeout` | boolean | `false` | `true` / `false` | Replace expired output with neutral values; when disabled, retain the last output |
 | `EyeMs` | integer | `250` | 1–5000 | How long a measured pupil from native eye data remains valid (ms) |
 | `FaceMs` | integer | `250` | 1–5000 | How long expression data remains valid (ms) |
-| `NeutralPupilMillimeters` | number | `3.5` | 1–10 | Pupil diameter output when no valid measurement is available (mm) |
+| `NeutralPupilMillimeters` | number | `3.5` | 1–10 | VRCFT 5 neutral pupil diameter (mm); VRCFT 6 receives 0 when no measurement is available |
 
 Out-of-range values fall back to the defaults. Ages are measured from the time the PC received the data; sender timestamps are not used.
 
-`NeutralizeOnTimeout` defaults to `false`, including in existing configurations that omit it. Expired gaze, openness and pupil measurements retain their last valid values, and expired expressions retain their last output. With `true`, expression output goes to zero after `FaceMs`; gaze returns to center and openness becomes 1 after `FaceMs`; measured pupil diameter returns to `NeutralPupilMillimeters` after `EyeMs`.
+`NeutralizeOnTimeout` defaults to `false`, including in existing configurations that omit it. Expired gaze, openness and pupil measurements retain their last valid values, and expired expressions retain their last output. With `true`, expression output goes to zero after `FaceMs`; gaze returns to center and openness becomes 1 after `FaceMs`; pupil output becomes unavailable after `EyeMs` (the configured neutral diameter on VRCFT 5, or the SDK sentinel 0 on VRCFT 6).
 
 The freshness limits still apply to source selection and accepting input, and stale input resets post-processing timing state. Connection and mode-announcement timeouts retain output when neutralization is disabled. A new session, source or mode, module deactivation, and teardown reset output. An explicitly invalid region in an ordinary expression frame clears its mapped channels. In independent `X` frames, an eye with quality state 0 instead retains its own independent history, subject to timeout neutralization; before that eye has a valid independent sample, its expression channels are zero, gaze is centered and openness is 1.
 

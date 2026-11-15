@@ -64,12 +64,24 @@ git -C .sdk/source/VRCFaceTracking switch --detach 7add14873e398c4095d06913cdeee
 | SDK 程序集 | `.sdk/VRCFaceTracking.Core.dll`、`.sdk/VRCFaceTracking.SDK.dll` |
 | SDK 来源记录 | `.sdk/sdk-provenance.json` |
 
+### 宿主兼容检查
+
+运行时测试使用官方5.4.5编译源码，以及另行检出的Steam 6提交`3d36379253d26961560d84acecd01d509aea467a`：
+
+```powershell
+git clone https://github.com/benaclejames/VRCFaceTracking.git .sdk/compat/source/vrcft6-steam
+git -C .sdk/compat/source/vrcft6-steam switch --detach 3d36379253d26961560d84acecd01d509aea467a
+pwsh -NoProfile -File tools/test-compatibility.ps1
+```
+
+测试使用私有配置目录与合成输入，让同一模块DLL通过两版宿主。`-ModuleDll`可指定已有DLL；`-InstalledHostDir`可在隔离输出中使用匹配的Steam组件。详见[测试说明](../tools/CompatibilityTests/README.md)，不使用GUI、正式追踪端口或用户设置。
+
 ## 项目文件
 
 ### UnifiedPicoModule.csproj
 
 - 目标框架 `net10.0`，启用可空引用类型和隐式 using，所有警告视为错误。
-- 版本号由 `Version` 属性指定，当前为 `0.4.0`。
+- 版本号由 `Version` 属性指定，当前为 `0.4.1`。
 - 通过 `HintPath` 引用 `$(VrcftSdkDir)` 下的 `VRCFaceTracking.SDK.dll` 和 `VRCFaceTracking.Core.dll`，并设置 `Private=false`，因此这两个 DLL 不会复制到输出目录。`VrcftSdkDir` 默认为仓库内的 `.sdk`，也可以通过 MSBuild 属性覆盖。
 - `CheckSdk` 目标在解析引用前检查这两个 DLL 是否存在，并要求程序集版本为 `5.4.5.0`。
 - 引用 `Microsoft.Extensions.Logging.Abstractions` 10.0.1，设置为 `PrivateAssets="all"`。
@@ -93,7 +105,7 @@ VRCFT 读取的模块元数据，包含以下字段：
 | 字段 | 当前值或说明 |
 |---|---|
 | `ModuleId` | `8322e16d-c38b-42f0-8d35-68f27227b442`，同时决定模块在 `CustomLibs` 下的目录名 |
-| `Version` | `0.4.0`，必须与 `UnifiedPicoModule.csproj` 中的版本一致 |
+| `Version` | `0.4.1`，必须与 `UnifiedPicoModule.csproj` 中的版本一致 |
 | `ModuleName` | `Unified PICO Face Tracking` |
 | `ModuleDescription` / `UsageInstructions` | 模块列表中显示的说明文字 |
 | `DownloadUrl` | 当前为空 |
@@ -163,14 +175,14 @@ git push origin v0.4.0
 2. 校验标签格式，并确认标签版本与 `module.json`、`UnifiedPicoModule.csproj` 中的版本完全一致。
 3. 安装 .NET 10 SDK。
 4. 将 VRCFaceTracking 的固定提交检出到 `.sdk/source/VRCFaceTracking`。该提交记录在工作流的 `VRCFT_COMMIT` 环境变量中，`tools/build.ps1` 会再次独立校验。
-5. 运行 `tools/package.ps1 -SdkSource .sdk/source/VRCFaceTracking`。
+5. 运行 `tools/package.ps1 -SdkSource .sdk/source/VRCFaceTracking`，再检出独立的Steam 6固定源码，用打包的DLL通过两版宿主兼容检查。
 6. 检查生成的 ZIP：路径中不得出现 `agents`、`archive`、`private`、`.sdk`、`bin`、`obj` 目录，或包含 `migration`、`current-settings` 的名称，不得包含 `.log`、`.pcap`、`.pcapng`、`.har`、`.pdb` 文件，除 `UnifiedPicoModule.dll` 外不得包含其他 DLL。包内的默认配置中 `Bridge.IP`、`Streaming.IP` 和 `Migration` 必须为空，且 `PostProcessing` 下除 `ChannelGain` 外不得有 `Enabled` 为 `true` 的规则。
 7. 将 ZIP 复制为不带时间戳的 `UnifiedPicoModule-<version>.zip`，重新计算 SHA256，并生成 `.zip.sha256`。
 8. 将这两个文件作为工作流产物上传，保留 14 天。
 
 ### 发布任务
 
-发布任务在构建任务成功后运行于 `ubuntu-latest`，权限为 `contents: write`，使用 GitHub 自动提供的 `GITHUB_TOKEN`。它下载两个文件并用 `sha256sum --check --strict` 校验，然后以草稿形式创建 Release、上传附件并自动生成 Release notes，最后将草稿设为公开。标签带预发布后缀时，Release 标记为 prerelease。
+发布任务在构建任务成功后运行于 `ubuntu-latest`，权限为 `contents: write`，使用 GitHub 自动提供的 `GITHUB_TOKEN`。它下载两个文件并用 `sha256sum --check --strict` 校验，然后以草稿形式创建Release、上传附件，取中英文更新日志中匹配版本的段落作为正文，最后将草稿设为公开。标签带预发布后缀时，Release标记为prerelease。
 
 使用该流程时需要注意：
 

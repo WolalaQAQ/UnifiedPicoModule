@@ -16,6 +16,20 @@ English | [简体中文](CHANGELOG_zh.md)
 - Eye-only mixed tracking opens no tongue socket and writes no foreign mouth fields. No Up/Down, UDP19031 subscription or native/model maximum merge is included.
 - Development source integration; worn calibration, personal-model accuracy and Avatar behavior remain live-test work. SDK dependency and published version metadata remain unchanged.
 
+## [0.4.1] - 2026-11-05
+
+### Features
+- Support Steam VRCFT 6.0.0.0 (`3d363792`) with the same DLL used by VRCFT 5.4.5.
+- Fix missing pupil measurements being encoded as constriction in VRCFT 6; retain measured values and VRCFT 5's configured neutral diameter.
+- Add isolated compatibility checks for both official host versions, including native OSC output and legacy Avatar routing.
+
+### Design Rationale
+- Use VRCFT 6's unavailable-measurement sentinel only at the SDK write boundary, keeping source selection, processing and configuration defaults unchanged.
+- Keep the 5.4.5 compilation target and use the host's existing OSC sender; no replacement host or SDK is included.
+
+### Notes & Caveats
+- Official 5.4.5 and Steam 6 component checks cover loading, channel ownership, input clocks, pupil validity/expiry and actual OSC serialization. Real Cymple/VRCFT 6 mixing and Avatar rendering remain untested.
+
 ## [0.4.0] - 2026-10-17
 
 ### Features

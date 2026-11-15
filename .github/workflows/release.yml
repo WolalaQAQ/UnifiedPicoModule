@@ -77,6 +77,19 @@ jobs:
           ./tools/package.ps1 -SdkSource .sdk/source/VRCFaceTracking
           if ($LASTEXITCODE -ne 0) { throw 'Build or packaging failed.' }
 
+      - name: Check out Steam 6 compatibility source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: benaclejames/VRCFaceTracking
+          ref: 3d36379253d26961560d84acecd01d509aea467a
+          path: .sdk/compat/source/vrcft6-steam
+          persist-credentials: false
+
+      - name: Verify both host versions
+        run: |
+          ./tools/test-compatibility.ps1 -ModuleDll bin/Release/net10.0/UnifiedPicoModule.dll
+          if ($LASTEXITCODE -ne 0) { throw 'Host compatibility checks failed.' }
+
       - name: Prepare public release assets
         run: |
           $ErrorActionPreference = 'Stop'
@@ -126,6 +139,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check out release notes
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
       - name: Download release assets
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
@@ -143,12 +161,27 @@ jobs:
           set -euo pipefail
           cd release
           sha256sum --check --strict -- *.zip.sha256
+          version=${RELEASE_TAG#v}
+          section() { awk -v h="## [$version]" 'index($0, h) == 1 { on = 1; next } on && /^## \[/ { exit } on' "$1"; }
+          for file in ../CHANGELOG.md ../CHANGELOG_zh.md; do
+            if [[ -z "$(section "$file")" ]]; then
+              echo "Missing changelog section for $version: $file" >&2
+              exit 1
+            fi
+          done
+          {
+            echo "## What's new"
+            section ../CHANGELOG.md
+            echo
+            echo "## 更新内容"
+            section ../CHANGELOG_zh.md
+          } > release-notes.md
           options=()
           if [[ "$IS_PRERELEASE" == 'true' ]]; then
             options+=(--prerelease)
           fi
           # Publish only after assets are attached. Do not overwrite an existing release.
           gh release create "$RELEASE_TAG" *.zip *.zip.sha256 \
-            --verify-tag --draft --generate-notes \
+            --verify-tag --draft --notes-file release-notes.md \
             --title "UnifiedPicoModule $RELEASE_TAG" "${options[@]}"
           gh release edit "$RELEASE_TAG" --draft=false

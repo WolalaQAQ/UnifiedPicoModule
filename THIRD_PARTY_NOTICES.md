@@ -147,6 +147,7 @@ SOFTWARE.
 - Author: benaclejames
 - Repository: https://github.com/benaclejames/VRCFaceTracking
 - Development baseline: [`7add14873e398c4095d06913cdeee7a01fc43fab`](https://github.com/benaclejames/VRCFaceTracking/tree/7add14873e398c4095d06913cdeee7a01fc43fab), net10.0, AssemblyVersion 5.4.5.0
+- Compatibility-test target: Steam 6.0.0.0 at [`3d36379253d26961560d84acecd01d509aea467a`](https://github.com/benaclejames/VRCFaceTracking/tree/3d36379253d26961560d84acecd01d509aea467a), also Apache-2.0; no host DLLs are distributed.
 - License: Apache-2.0, see the [LICENSE at the pinned commit](https://github.com/benaclejames/VRCFaceTracking/blob/7add14873e398c4095d06913cdeee7a01fc43fab/LICENSE) and the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)
 - Copyright notice: the license's copyright appendix reads Copyright 2024 benaclejames
 - Use: references to the SDK / Core interfaces.
@@ -168,7 +169,7 @@ This file is not a redistribution license addendum for the Apache-2.0 DLLs. The 
 - Source repository: [dotnet/dotnet pinned commit](https://github.com/dotnet/dotnet/tree/fad253f51b461736dfd3cd9c15977bb7493becef)
 - Dependencies: the net10 target depends on `Microsoft.Extensions.DependencyInjection.Abstractions` 10.0.1
 
-The module project references this package with `PrivateAssets=all`. `PrivateAssets` is a dependency-flow setting. It does not guarantee that the files are never copied, and it is not a license. The module package is assembled from a file allowlist and contains no logging or other NuGet DLLs. The required runtime dependencies are provided by the host; the module has been run on official VRCFT 5.4.5, and other host versions have not been tested. Distributing these components instead would require a separate review of copyrights, licenses and addenda. Microsoft's copyright is not held by this project.
+The module project references this package with `PrivateAssets=all`. `PrivateAssets` is a dependency-flow setting. It does not guarantee that the files are never copied, and it is not a license. The module package is assembled from a file allowlist and contains no logging or other NuGet DLLs. The required runtime dependencies are provided by the host; official VRCFT 5.4.5 has live validation, and Steam 6 has isolated component validation. Distributing these components instead would require a separate review of copyrights, licenses and addenda. Microsoft's copyright is not held by this project.
 
 ## Assets and future updates
 

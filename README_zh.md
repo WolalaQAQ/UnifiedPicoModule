@@ -14,7 +14,7 @@ UnifiedPicoModule 是面向 VRCFaceTracking（VRCFT）的 PICO 眼动与面部�
 
 PICO 头显的追踪数据可以通过多种发送端输出，包括 PicoFacialBridge、PICO Connect、Streaming Assistant 以及早期的 PicoFacialDataDaemon。这些发送端使用的数据格式和端口各不相同。本模块支持上述全部格式，能够自动识别当前可用的数据源，并将数据统一输出至 VRCFT，因此无需针对不同的发送端分别安装模块。
 
-> 当前版本为 0.4.0，基于 VRCFT 5.4.5（net10.0）构建。各使用组合的验证情况请参阅[兼容性](#兼容性)，版本变化见[更新日志](CHANGELOG_zh.md)。
+> 当前版本为 0.4.1。同一 DLL 支持 VRCFT 5.4.5 与 Steam VRCFT 6.0.0.0，仍基于 5.4.5 SDK（net10.0）构建。各使用组合的验证情况请参阅[兼容性](#兼容性)，版本变化见[更新日志](CHANGELOG_zh.md)。
 
 ## 支持的发送端
 
@@ -32,7 +32,7 @@ PICO 头显的追踪数据可以通过多种发送端输出，包括 PicoFacialB
 ### 前提条件
 
 - Windows 10 或 Windows 11
-- VRCFaceTracking 5.4.5
+- VRCFaceTracking 5.4.5 或 Steam VRCFaceTracking 6.0.0.0
 - 一种可用的发送端，且与 PC 处于同一局域网
 - 支持面部追踪的 VRChat Avatar
 
@@ -188,6 +188,10 @@ VRCFT 无需保持窗口前台。追踪期间，模块让官方 VRCFT 的定时�
 如果舌头数值存在短时掉零，可以启用 `TongueHold`。如果问题是嘴部未明显张开时就出现伸舌，应使用 `TongueJawGate`。两条规则针对的是不同的问题。
 
 ## 兼容性
+
+VRCFT 6 兼容目标为 Steam Build 26384174、提交 `3d36379253d26961560d84acecd01d509aea467a`。官方 5.4.5 与 Steam 6 的隔离组件测试均已通过，覆盖原生脸部 blob、旧 Avatar 参数、模块加载和瞳孔编码。真实 Cymple／VRCFT 6 混搭与 Avatar 渲染尚未测试。
+
+VRCFT 6 以 0 表示没有瞳孔测量。模块此时写入该标记，不再写正数占位值，以免被解释成缩瞳。实测瞳孔沿用已有保持／过期策略；VRCFT 5 仍使用配置的中性直径。原生脸部输出复用宿主发送器，需要兼容 Avatar，不要求使用补丁宿主。
 
 已在 PICO 4 Pro 上验证的接入环境：
 

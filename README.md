@@ -231,6 +231,16 @@ The build script verifies the SDK commit and the digests of key files. The modul
 - [Configuration tool guide](tools/ConfigTool/README.md)
 - [Contributing](CONTRIBUTING.md)
 
+## Community
+
+Join the Pico-Enhance community for help, discussion and release announcements.
+
+<a href="https://discord.gg/ueSEydeVD8"><img src="https://img.shields.io/badge/Discord-Join%20Pico--Enhance-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join Pico-Enhance on Discord"></a>
+
+**QQ group:** 1129699813. Scan the code below with QQ to join.
+
+<img src="assets/community/qq-group-qr.png" alt="Pico-Enhance QQ group QR code" width="240">
+
 ## Acknowledgements
 
 This module is an independent implementation based on the protocol material and behavioral observations published by the following projects:

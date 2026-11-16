@@ -231,6 +231,16 @@ git -C .sdk/source/VRCFaceTracking switch --detach 7add14873e398c4095d06913cdeee
 - [配置工具说明](tools/ConfigTool/README_zh.md)
 - [参与贡献](CONTRIBUTING_zh.md)
 
+## 社区
+
+使用求助、交流和版本更新通知，欢迎加入 Pico-Enhance 社区。
+
+<a href="https://discord.gg/ueSEydeVD8"><img src="https://img.shields.io/badge/Discord-Join%20Pico--Enhance-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="加入 Pico-Enhance Discord"></a>
+
+**QQ 群：** 1129699813，用 QQ 扫描下方二维码即可加入。
+
+<img src="assets/community/qq-group-qr.png" alt="Pico-Enhance QQ 群二维码" width="240">
+
 ## 致谢
 
 本模块参考以下项目公开的协议资料与行为观察，在此基础上独立实现：

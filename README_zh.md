@@ -10,6 +10,12 @@
 
 [English](README.md) | 简体中文
 
+> **本分支（Rulez777）：舌头左右。** 即 UnifiedPicoModule 0.4.1 加上舌头接收：舌头由 [PicoET-Enhance（舌头分支）](https://github.com/Rulez777/PicoET-Enhance) 在头显上计算，经 Wi-Fi 提供 `TongueLeft` / `TongueRight` 及 `TongueOut` 补充值（模块向头显 UDP 19031 订阅；无需 ADB，无需防火墙规则）。其余部分不变。
+>
+> **安装：** 从 [PicoET-Enhance Release](https://github.com/Rulez777/PicoET-Enhance/releases/latest) 下载 `UnifiedPicoModule-0.4.1-tongue.4.zip`，解压，关闭 VRCFaceTracking，双击 `Install.cmd`。它会把模块复制到 `%APPDATA%\VRCFaceTracking\CustomLibs`，并保留已有的 `UnifiedPicoModule.json`。同一 zip 中的 `Uninstall.cmd` 可恢复之前的 DLL。头显端只需同一 Release 中的一个 Magisk zip。
+>
+> 舌头诊断默认关闭。在 DLL 旁放一个空文件 `tongue-diagnostics.enabled` 即可开启 `tongue-status.json`（每秒更新）和每秒一行日志。
+
 UnifiedPicoModule 是面向 VRCFaceTracking（VRCFT）的 PICO 眼动与面部追踪模块。
 
 PICO 头显的追踪数据可以通过多种发送端输出，包括 PicoFacialBridge、PICO Connect、Streaming Assistant 以及早期的 PicoFacialDataDaemon。这些发送端使用的数据格式和端口各不相同。本模块支持上述全部格式，能够自动识别当前可用的数据源，并将数据统一输出至 VRCFT，因此无需针对不同的发送端分别安装模块。

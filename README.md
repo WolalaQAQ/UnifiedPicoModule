@@ -14,6 +14,12 @@ UnifiedPicoModule is a PICO eye and face tracking module for VRCFaceTracking (VR
 
 Tracking data from a PICO headset can be delivered by several senders, including PicoFacialBridge, PICO Connect, Streaming Assistant and the earlier PicoFacialDataDaemon. Each sender uses its own data format and port. This module supports all of these formats, detects which source is currently available, and forwards its data to VRCFT through a single output, so there is no need to install a separate module for each sender.
 
+> **This fork (Rulez777): tongue left/right.** It is UnifiedPicoModule 0.4.1 plus a receiver for the tongue computed on the headset by [PicoET-Enhance (tongue fork)](https://github.com/Rulez777/PicoET-Enhance): `TongueLeft` / `TongueRight` and a `TongueOut` fallback, over Wi-Fi (the module asks the headset on UDP 19031; no ADB, no firewall rule). Everything else is unchanged.
+>
+> **Install:** download `UnifiedPicoModule-0.4.1-tongue.4.zip` from the [PicoET-Enhance release](https://github.com/Rulez777/PicoET-Enhance/releases/latest), unpack it, close VRCFaceTracking and double-click `Install.cmd`. It copies the module into `%APPDATA%\VRCFaceTracking\CustomLibs` and keeps your existing `UnifiedPicoModule.json`. `Uninstall.cmd` in the same zip puts the previous DLL back. The headset side is one Magisk zip from the same release.
+>
+> Tongue diagnostics are off by default. An empty file `tongue-diagnostics.enabled` next to the DLL turns on `tongue-status.json` (updated once a second) and a once-a-second log line.
+
 > The current version is 0.4.1. One DLL supports VRCFT 5.4.5 and Steam VRCFT 6.0.0.0, while remaining built against the 5.4.5 SDK (net10.0). See [Compatibility](#compatibility) for verified combinations and the [changelog](CHANGELOG.md) for version changes.
 
 ## Supported senders

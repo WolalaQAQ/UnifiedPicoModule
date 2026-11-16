@@ -6,3 +6,4 @@
 *.md text eol=lf
 *.ps1 text eol=lf
 LICENSE text eol=lf
+*.cmd text eol=crlf

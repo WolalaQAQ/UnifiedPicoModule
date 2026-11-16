@@ -80,6 +80,8 @@ public sealed class SourceCoordinator : IDisposable
         raw is not null && MonotonicClock.Fresh(raw.Arrival, now, config.Stale.FaceMs) &&
         NeutralFaceMapper.HasConsumableExpressions(raw, eyeEnabled, faceEnabled);
     public IReadOnlyList<SourceSnapshot> Snapshots => sources.Select(s => s.Snapshot).ToArray();
+    /// <summary>Headset address found by the Bridge source (explicit Bridge.IP or auto-discovery).</summary>
+    public System.Net.IPAddress? BridgePeer => sources.OfType<BridgeUdpSource>().FirstOrDefault()?.PeerAddress;
     public void Dispose()
     {
         cancellation.Cancel();

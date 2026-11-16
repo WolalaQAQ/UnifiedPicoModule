@@ -23,6 +23,7 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
     private bool timerPolicyChanged, timerPolicyAttempted;
     private PowerThrottlingState previousTimerPolicy;
     private double lastError;
+    private TongueReceiver? tongue;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct PowerThrottlingState { public uint Version, ControlMask, StateMask; }
@@ -129,6 +130,18 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
         {
             HonorTimerResolution();
             coordinator = new(config, Log);
+            // Tongue L/R from the PicoET-Enhance payload over Wi-Fi. Always on: with no headset
+            // replies it stays not-fresh and leaves the stock tongue untouched. Diagnostics are off: an
+            // empty tongue-diagnostics.enabled file next to the DLL turns on tongue-status.json and a
+            // once-a-second log line (the file may instead contain another path for the status file).
+            var moduleDir = Path.GetDirectoryName(GetType().Assembly.Location)!;
+            var marker = Path.Combine(moduleDir, "tongue-diagnostics.enabled");
+            string? status = !File.Exists(marker) ? null : File.ReadAllText(marker).Trim() is { Length: > 0 } custom ? custom : Path.Combine(moduleDir, "tongue-status.json");
+            // Headset address: explicit Bridge.IP, otherwise the peer Bridge auto-discovery locked.
+            System.Net.IPAddress.TryParse(config.Bridge.IP, out var configuredIp);
+            var sources = coordinator;
+            try { tongue = new TongueReceiver(() => configuredIp ?? sources.BridgePeer, Log, status); }
+            catch(Exception ex) { Log($"Tongue receiver unavailable; normal tracking continues: {ex.Message}"); }
             wasActive = true;
         }
         catch
@@ -156,7 +169,7 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
     }
     private void StopSources()
     {
-        try { coordinator?.Dispose(); }
+        try { tongue?.Dispose(); tongue=null; coordinator?.Dispose(); }
         finally { coordinator = null; RestoreTimerPolicy(); }
     }
     private void RestoreTimerPolicy()
@@ -187,6 +200,16 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
         var data = UnifiedTracking.Data;
         foreach (var (channel, sdk) in Channels)
             if (ExpressionFrame.IsEye(channel) ? ownsEye : ownsFace) data.Shapes[(int)sdk].Weight = output.Expressions[channel];
+        if (ownsFace && tongue is not null)
+        {
+            float pucker=Math.Max(Math.Max(data.Shapes[(int)UnifiedExpressions.LipPuckerUpperLeft].Weight,data.Shapes[(int)UnifiedExpressions.LipPuckerUpperRight].Weight),
+                Math.Max(data.Shapes[(int)UnifiedExpressions.LipPuckerLowerLeft].Weight,data.Shapes[(int)UnifiedExpressions.LipPuckerLowerRight].Weight));
+            float cheekPuff=Math.Max(data.Shapes[(int)UnifiedExpressions.CheekPuffLeft].Weight,data.Shapes[(int)UnifiedExpressions.CheekPuffRight].Weight);
+            var t=tongue.Poll(data.Shapes[(int)UnifiedExpressions.TongueOut].Weight,pucker,cheekPuff);
+            data.Shapes[(int)UnifiedExpressions.TongueLeft].Weight=t.Left;
+            data.Shapes[(int)UnifiedExpressions.TongueRight].Weight=t.Right;
+            if(t.Fresh) data.Shapes[(int)UnifiedExpressions.TongueOut].Weight=t.Out; // Native plus high-confidence, negative-trained fallback.
+        }
         if (!ownsEye) return;
         data.Eye.Left.Gaze.x = output.Left.GazeX; data.Eye.Left.Gaze.y = output.Left.GazeY;
         data.Eye.Left.Openness = output.Left.Openness; data.Eye.Left.PupilDiameter_MM = SdkPupil(output.Left);

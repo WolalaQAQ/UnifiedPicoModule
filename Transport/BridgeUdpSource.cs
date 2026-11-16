@@ -29,6 +29,9 @@ public sealed class BridgeUdpSource : UdpTrackingSource
     private int effectiveMask;
     private double nextSubscription;
 
+    /// <summary>Headset address of the locked Bridge peer (configured or auto-discovered), or null.</summary>
+    public IPAddress? PeerAddress => Volatile.Read(ref peer)?.Address;
+
     public BridgeUdpSource(BridgeSettings settings, Action<string> log, bool eyeEnabled = true, bool faceEnabled = true) : base(SourceKind.Bridge, log)
     {
         ArgumentNullException.ThrowIfNull(settings);

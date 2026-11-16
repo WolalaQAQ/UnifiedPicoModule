@@ -2,6 +2,16 @@
 
 [English](CHANGELOG.md) | 简体中文
 
+## [0.4.1-tongue.4] - 2026-11-10（分支 Rulez777/UnifiedPicoModule）
+
+### 新增
+- 经 Wi-Fi（UDP 19031）接收 PicoET-Enhance 舌头模块的舌头左右数据，已变基到 0.4.1：支持 VRCFT 5.4.5 与 Steam VRCFT 6.0.0.0。
+- 发布 zip 中的 `Install.cmd` 会把模块复制到 VRCFaceTracking 的 `CustomLibs`，并保留已有配置。
+- PICO 报告鼓腮时（高于 0.3，0.5 时完全生效，保持 400 ms）不输出舌头：鼓腮曾导致误报舌头。
+
+### 变更
+- 舌头诊断默认关闭：仅当 DLL 旁存在 `tongue-diagnostics.enabled` 时才写出 `tongue-status.json` 和每秒一行日志。
+
 ## [0.4.1] - 2026-11-05
 
 ### 新增

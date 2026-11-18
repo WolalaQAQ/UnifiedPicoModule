@@ -20,7 +20,9 @@ Copyright (c) 2026 UnifiedPicoModule contributors
 
 ### PC舌头整合
 
-开发版TJR1接收器替换[Rulez777的PR #1](https://github.com/WolalaQAQ/UnifiedPicoModule/pull/1)中的头显接收方案，审阅版本为`f91d18d46e5661ea9e205eee9d854d965c4c99bc`。环回线格式、源年龄状态机及生命周期测试为本项目实现，未复制旧`Sdk/TongueReceiver.cs`或TNG2订阅。配套PicoET-Enhance PC App在其仓库记录模型及代码归因。
+开发版TJR1／TJR2接收器替换[Rulez777的PR #1](https://github.com/WolalaQAQ/UnifiedPicoModule/pull/1)中的头显接收方案，审阅版本为`f91d18d46e5661ea9e205eee9d854d965c4c99bc`。环回线格式、源年龄状态机及生命周期测试为本项目实现，未复制旧`Sdk/TongueReceiver.cs`或TNG2订阅。配套PicoET-Enhance PC App在其仓库记录模型及代码归因。
+
+扩展舌头通道借鉴UndefinedSignal以MIT许可分享的[MouthLink贡献](https://github.com/WolalaQAQ/PicoET-Enhance/issues/5)。TJR2及扩展SDK所有权／生命周期处理为独立实现，没有将其原生ORT绑定、图像缩放器或相机传输复制进模块。
 
 本项目采用独立实现，不复制 SAFT 与 lonelyicer 中许可不明的代码，也不通过改名、翻译或 AI 改写规避许可要求。SAFT 与 lonelyicer 的实现和图片均未纳入本项目。改名、翻译或 AI 改写不构成授权。
 

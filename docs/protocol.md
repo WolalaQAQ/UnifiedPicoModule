@@ -2,7 +2,7 @@
 
 English | [简体中文](protocol_zh.md) · [README](../README.md)
 
-This document describes the four main UDP tracking formats and how the module connects to each sender. The additional loopback TJR1 tongue-result stream is specified in [PC tongue results](../TONGUE.md#tjr1-wire-format). The source code in `Protocol/`, `Transport/`, `Mapping/` and `Runtime/` is authoritative; it is not included in the module ZIP. For the full list of configuration fields, see the [configuration reference](configuration.md).
+This document describes the four main UDP tracking formats and how the module connects to each sender. The additional loopback TJR1/TJR2 tongue-result stream is specified in [PC tongue results](../TONGUE.md#tjr1-wire-format); whole-mouth MFR1 results are defined below. The source code in `Protocol/`, `Transport/`, `Mapping/` and `Runtime/` is authoritative; it is not included in the module ZIP. For the full list of configuration fields, see the [configuration reference](configuration.md).
 
 The module implements these formats independently. For sources and licensing, see the [third-party notices](../THIRD_PARTY_NOTICES.md).
 
@@ -21,6 +21,74 @@ General conventions:
 - Lengths must match exactly, except for `StreamingHeader16`, where the length is a lower bound.
 - Ports are fixed and cannot be configured. Each port is bound exclusively. If an older module still holds a port, binding fails and the log reports the port and the error.
 - The receive buffer is 2048 bytes, larger than every supported format.
+
+## MFR1 whole-mouth results
+
+MFR1 carries the `pico-mouth50-v1` continuous mouth controls from PC inference. It shares the existing IPv4 loopback listener with TJR1/TJR2 (`127.0.0.1:Tongue.Port`, default 45682). The listener starts only when `Tongue.Enabled=true` and VRCFT grants this module face ownership. It does not select a face source, carry images, or run a model inside VRCFT. When Cymple owns the face, this module neither writes nor clears its mouth channels; PICO eye output is unchanged.
+
+Each datagram is exactly 256 bytes, equivalent to Python `struct.Struct('<4sHHQQQQQfI50f')`. All integers and IEEE 754 binary32 floats are little-endian.
+
+| Offset | Type | Field |
+|---:|---|---|
+| 0 | 4 bytes | ASCII `MFR1` |
+| 4 | uint16 | Version, 1 |
+| 6 | uint16 | Datagram size, 256 |
+| 8 | uint64 | Nonzero PC output `session_id` |
+| 16 | uint64 | `source_seq` |
+| 24 | uint64 | Original image `mouth_sensor_ns` |
+| 32 | uint64 | PC emission monotonic `pc_emit_mono_ns`; diagnostic only |
+| 40 | uint64 | `valid_mask`; only bits 0–49 are allowed |
+| 48 | float32 | `source_age_ms` at emission, finite and nonnegative |
+| 52 | uint32 | `state`: 0 fresh, 1 invalid/release |
+| 56 | float32[50] | Controls in the order below |
+
+The first 44 controls preserve the earlier MouthLink order; six are appended. Left/right always mean the wearer's left/right.
+
+```text
+ 0 CheekPuff             1 CheekSquintL          2 CheekSquintR
+ 3 JawForward            4 JawLeft               5 JawOpen
+ 6 JawRight              7 MouthClose            8 MouthDimpleL
+ 9 MouthDimpleR         10 MouthFrownL           11 MouthFrownR
+12 MouthFunnel          13 MouthLeft             14 MouthLowerDownL
+15 MouthLowerDownR      16 MouthPressL           17 MouthPressR
+18 MouthPucker          19 MouthRight            20 MouthRollLower
+21 MouthRollUpper       22 MouthShrugLower       23 MouthShrugUpper
+24 MouthSmileL          25 MouthSmileR           26 MouthStretchL
+27 MouthStretchR        28 MouthUpperUpL         29 MouthUpperUpR
+30 NoseSneerL           31 NoseSneerR            32 TongueOut
+33 TongueLeft           34 TongueRight           35 TongueUp
+36 TongueDown           37 CheekPuffLeft         38 CheekPuffRight
+39 CheekSuckLeft        40 CheekSuckRight        41 MouthTightenerLeft
+42 MouthTightenerRight  43 TongueRoll            44 MouthUpperLeft
+45 MouthUpperRight      46 MouthLowerLeft        47 MouthLowerRight
+48 LipFunnelUpper       49 LipFunnelLower
+```
+
+For state 0, at least one mask bit must be set. Every supported value must be finite and within `[0,1]`. Unset bits mean unsupported/unknown, not measured neutral: their wire values must be zero and they must not write random or untrained predictions to the SDK. State 1 requires mask 0 and all 50 values zero; source identity, timestamps and source age remain in the packet. Other states, high mask bits, inconsistent masks, non-finite or out-of-range values, nonzero unknown values, and incorrect lengths/headers are rejected without extending freshness.
+
+### Ordering and release
+
+TJR and MFR use one receiver and one ordering history. Within a session, sequence numbers must increase and fresh results must advance `mouth_sensor_ns`. A release may repeat the last sequence, but an older release cannot clear newer output. Release is not a new image and does not advance the sensor-time anchor. A newer fresh result may resume that session. Replaced sessions are retired and cannot take over again.
+
+MFR promotion is one-way for the lifetime of a listener: after accepting MFR1, all TJR1/TJR2 packets are rejected, including packets from an unseen legacy session. Expiry or an MFR release does not permit legacy packets to take over. An intentional downgrade requires a listener restart, such as module deactivation/reactivation; its new receiver starts with no cached output.
+
+The lease is 350 ms from the image source, not 350 ms from every arrival. Initial remaining time is `350 - source_age_ms`. The receiver anchors the image clock to its local monotonic clock; later packets may tighten this anchor but never move it forward to hide backlog. Duplicate packets, increasing sequences with repeated/backward sensor times, and stale packets cannot renew output. PC emission time is retained without comparing the PC clock to headset timestamps.
+
+### SDK mapping
+
+At the module's sole `Write` boundary, the current PICO frame is written first, then supported MFR controls overwrite their corresponding mouth targets. The first 33 controls reuse `NeutralFaceMapper` correspondence. The extra controls map directly by name, except each `LipFunnelUpper/Lower` is copied to that lip's left and right Funnel channels.
+
+Independent supported CheekPuff, upper/lower horizontal, and upper/lower Funnel values take precedence over aggregate fan-out only for their own targets. For example, valid `MouthUpperLeft` does not erase an unsupported `MouthLowerLeft`: the lower lip retains the valid aggregate `MouthLeft`, or the current PICO lower-lip output when that aggregate is unsupported.
+
+All MFR values are direct `[0,1]` controls. They do not use legacy TJR presence thresholds, direction scaling, multiplication by TongueOut, the legacy 0.99 ceiling, or PICO post-processing rules. In particular, zero/unsupported TongueOut does not cancel an independently valid direction or Roll.
+
+On mask loss, expiry, release, pause, errors or teardown, native mouth targets return to the current PICO pipeline output. Extra SDK targets are cleared only if this adapter actually wrote them previously; untouched extensions retain their SDK values. No face values are changed when `ownsFace=false`. These mappings use existing official SDK5/6 channels without changing the host or its enums.
+
+### Synthetic interoperability tests
+
+`tools/test-mouth-wire.py --dll <TongueTests.dll> --pc-wire <pc-tongue/wire.py> --output <new-directory>` imports the actual `face_result_packet` encoder. It checks all 50 individual mask bits, aggregate/independent precedence, unknown fields, ordering, release, expiry, face ownership and UDP socket release. `--batch-only` skips UDP.
+
+`TongueTests.dll --mfr-batch <cases.jsonl> <result.json>` provides a deterministic SDK-write assertion API. Each JSONL row may contain `packet` (base64 datagram), `advanceMs` (local monotonic time increment), `ownsFace`, expected `accepted`/`reason`, and an `expected` dictionary of official SDK expression names to values. A row without a packet tests expiry. The synthetic PICO fallback has JawOpen 0.23, TongueOut 0.17, other native mouth controls 0; untouched SDK fields start at 0.731. The result contains the schema, ordered channels and each step's SDK snapshot. Tests do not load models or a host UI.
 
 ## Verification status
 

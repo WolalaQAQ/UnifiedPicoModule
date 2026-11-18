@@ -1,14 +1,14 @@
-# PC舌头接收端：开发分支
+# PC端到端整嘴接收：开发分支
 
 [English](TONGUE.md) | 简体中文
 
-本仓库与[PicoET-Enhance](https://github.com/WolalaQAQ/PicoET-Enhance/tree/feat/tongue-pc)配套使用`feat/tongue-pc`。[发送端说明](https://github.com/WolalaQAQ/PicoET-Enhance/blob/feat/tongue-pc/TONGUE_zh.md)包含相机源、PC App、模型与个人校准。模块只接数值结果，不运行模型或启动相机。
+本仓库与[PicoET-Enhance](https://github.com/WolalaQAQ/PicoET-Enhance/tree/feat/tongue-pc)配套使用`feat/tongue-pc`。[发送端说明](https://github.com/WolalaQAQ/PicoET-Enhance/blob/feat/tongue-pc/TONGUE_zh.md)包含相机源、PC App、录制、回归模型与本地教师蒸馏。头显负责取图，PC负责配置和推理，本模块只接数值结果并在VRCFT原Write边界合并，不运行模型或启动相机。
 
 ## 构建与使用
 
 1. 按[开发说明](docs/development_zh.md)准备固定版本官方VRCFT SDK并构建，依赖仍为VRCFT 5.4.5／.NET 10。
 2. 关闭VRCFT，按[安装说明](README_zh.md#安装)安装构建的模块，保留已有配置，不同时加载两个副本。
-3. 测试PICO舌头时，由VRCFT将面部输出分配给PICO模块。PC App不选择或覆盖嘴部来源。
+3. 测试PICO整嘴回归时，由VRCFT将面部输出分配给PICO模块。PC App不选择或覆盖嘴部来源。
 4. 在App中启用本机UDP输出到`127.0.0.1:45682`，再开始实时输入；端口与模块的`Tongue.Port`一致。
 
 新增配置默认值：
@@ -21,16 +21,31 @@
 
 只有`ownsFace && Tongue.Enabled`才打开socket。Cymple嘴＋PICO眼混搭时，PICO模块不打开舌头端口、不写外部嘴部或舌头字段；宿主中保留原有眼嘴分工。
 
-## 输出行为
+## MFR1整嘴输出
+
+端到端模型使用256字节MFR1，schema为`pico-mouth50-v1`，通过同一个环回UDP端口发送50项命名连续控制量及有效位掩码。旧44字段原序保留，追加上下唇各自左右横移四项和上下Funnel两项。有效位来自模型manifest中实际训练过的通道，不因模型输出50个浮点数就将全部标为支持。
 
 | PC结果 | 模块输出 |
 |---|---|
-| 新鲜present | 使用PC的Out／Left／Right |
-| 新鲜absent | 三项立即归零，即使原厂Out为正 |
+| 新鲜、该字段有效 | 覆盖对应PICO嘴部输出；独立唇形／脸颊值优先于旧聚合扇出 |
+| 字段未支持／未知 | 不把其零载荷当中性测量；原厂已有通道继续使用当前PICO值 |
+| invalid、停止或过期 | 退出模型覆盖；原厂通道恢复当前PICO值，释放本模型曾写入的新扩展 |
+| 面部属于其他模块 | 不写入或清除该模块的嘴／舌字段 |
+
+MFR1不使用旧TJR的舌头出现阈值、方向缩放或`Out×direction`门控；0与小幅非零都作为模型控制值传递。序号、sensor时间、会话退役和来源年龄共同限制新鲜度，重复包不续期。解析与精确布局见[协议说明](docs/protocol_zh.md)。
+
+配置段暂保留`Tongue`名称，以便已有配置继续使用同一个45682端口；这不表示新结果只包含舌头。接收器不引入ORT或教师依赖，也不修改官方VRCFT宿主。
+
+## 旧TJR1／TJR2兼容输出
+
+| PC结果 | 模块输出 |
+|---|---|
+| 新鲜present | 使用PC的Out／Left／Right，TJR2另提供Up／Down／Roll |
+| 新鲜absent | 模型提供的舌头通道立即归零，即使原厂Out为正 |
 | uncertain | 原正例最多保持100ms，同时受原期限限制 |
 | invalid、stop、过期或缺失 | 恢复本轮原厂管线Out，清除Left／Right |
 
-不做`max(native, model)`合并，不提供或写入Up／Down。原`LegacyExpressionCeiling`也作用于三项PC通道。主来源的保留末值设置不能关闭舌头过期。UDP线程只更新状态，原Write边界仍是唯一SDK写入者。暂停、Update失败及Teardown会取消并等待接收线程退出，再释放socket。
+不做`max(native, model)`合并。只接过TJR1的实例不动Up／Down／Roll；一旦TJR2提供过这些通道，absent、invalid、过期、Teardown和切回TJR1都会清除扩展值，避免姿态残留。TJR2的Out为零时方向也归零。原`LegacyExpressionCeiling`作用于全部PC通道。主来源的保留末值设置不能关闭舌头过期。UDP线程只更新状态，原Write边界仍是唯一SDK写入者。暂停、Update失败及Teardown会取消并等待接收线程退出，再释放socket。
 
 ## TJR1线格式
 
@@ -50,6 +65,12 @@
 
 最长350ms期限扣除源年龄，源时钟锚进一步阻止积压包逐次续期。重复包、旧序号或重复sensor时间都不能延长输出期限。
 
+### TJR2扩展
+
+PC App的MouthLink模型在同一环回端口发送80字节TJR2。偏移0／4／6分别为`TJR2`／版本2／长度80，其余TJR1字段保持原偏移；末尾增加偏移64的float32 Up、68的Down、72的Roll和76的uint32保留零。扩展值必须有限且在[0,1]内。状态、源顺序、过期和会话退役规则与TJR1相同。TJR2需更新后的接收器，旧接收器会拒绝而不是误读。
+
+MouthLink推理仍在PC App中使用既有ORT后端，模块不增加原生运行库依赖，不接管其余嘴型。这是数值互通入口，不包含已验收的个人模型。
+
 ## 离线检查
 
 先用`tools/build.ps1`准备`.sdk/`，然后执行：
@@ -65,4 +86,4 @@ python tools/test-tongue-wire.py --dll artifacts/tongue-check/bin/TongueTests/re
 
 ## 上游基础
 
-参考[PR #1](https://github.com/WolalaQAQ/UnifiedPicoModule/pull/1)，审阅版本`f91d18d46e5661ea9e205eee9d854d965c4c99bc`，改为PC本机TJR1接收。未引入旧`Sdk/TongueReceiver.cs`、头显订阅或原厂／模型最大值合并；本分支不含无关兼容性／CI改动。
+参考[PR #1](https://github.com/WolalaQAQ/UnifiedPicoModule/pull/1)，审阅版本`f91d18d46e5661ea9e205eee9d854d965c4c99bc`，改为PC本机TJR1／TJR2接收。扩展舌头方向借鉴UndefinedSignal的[MouthLink贡献](https://github.com/WolalaQAQ/PicoET-Enhance/issues/5)。未引入旧`Sdk/TongueReceiver.cs`、头显订阅、模块内ORT或原厂／模型最大值合并；本分支不含无关兼容性／CI改动。

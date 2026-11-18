@@ -2,7 +2,7 @@
 
 [English](protocol.md) | 简体中文 · [README](../README_zh.md)
 
-本文档说明四种主要UDP追踪格式，以及模块与各发送端之间的连接行为。额外的环回TJR1舌头结果见[PC舌头协议](../TONGUE_zh.md#tjr1线格式)。内容以`Protocol/`、`Transport/`、`Mapping/`和`Runtime/`目录中的源码为准，这些源码不随模块ZIP分发。配置字段完整说明见[配置说明](configuration_zh.md)。
+本文档说明四种主要UDP追踪格式，以及模块与各发送端之间的连接行为。额外的环回TJR1／TJR2舌头结果见[PC舌头协议](../TONGUE_zh.md#tjr1线格式)，MFR1整嘴结果见下节。内容以`Protocol/`、`Transport/`、`Mapping/`和`Runtime/`目录中的源码为准，这些源码不随模块ZIP分发。配置字段完整说明见[配置说明](configuration_zh.md)。
 
 本模块独立实现上述格式。来源与许可请参阅[第三方声明](../THIRD_PARTY_NOTICES_zh.md)。
 
@@ -21,6 +21,74 @@
 - 除 `StreamingHeader16` 的长度为下界外，其余格式的长度必须完全相等。
 - 端口固定，不可配置。每个端口以排他方式绑定，若旧模块仍占用端口，绑定失败并在日志中报告端口与错误原因。
 - 接收缓冲区为 2048 字节，大于所有支持的格式。
+
+## MFR1整嘴结果
+
+MFR1传输PC推理产生的`pico-mouth50-v1`连续嘴部控制量，与TJR1／TJR2共用已有IPv4环回监听`127.0.0.1:Tongue.Port`，默认45682。只有`Tongue.Enabled=true`且VRCFT将面部输出权交给本模块时才监听。它不选择面捕来源、不传图像，也不在VRCFT内运行模型。Cymple拥有嘴部时，本模块不写入或清除它的嘴部通道；PICO眼追保持原有行为。
+
+每包恰好256字节，对应Python `struct.Struct('<4sHHQQQQQfI50f')`，整数与IEEE 754 binary32浮点均为little-endian。
+
+| 偏移 | 类型 | 字段 |
+|---:|---|---|
+| 0 | 4字节 | ASCII `MFR1` |
+| 4 | uint16 | 版本1 |
+| 6 | uint16 | 数据报长度256 |
+| 8 | uint64 | 非零PC输出`session_id` |
+| 16 | uint64 | `source_seq` |
+| 24 | uint64 | 原图`mouth_sensor_ns` |
+| 32 | uint64 | PC发包单调时间`pc_emit_mono_ns`，仅作诊断 |
+| 40 | uint64 | `valid_mask`，仅允许低50位 |
+| 48 | float32 | 发包时`source_age_ms`，有限且非负 |
+| 52 | uint32 | `state`：0为有效新结果，1为无效／释放 |
+| 56 | float32[50] | 按下列固定顺序排列的控制量 |
+
+前44项保留MouthLink旧顺序，最后追加六项；左右均为佩戴者自身左右。
+
+```text
+ 0 CheekPuff             1 CheekSquintL          2 CheekSquintR
+ 3 JawForward            4 JawLeft               5 JawOpen
+ 6 JawRight              7 MouthClose            8 MouthDimpleL
+ 9 MouthDimpleR         10 MouthFrownL           11 MouthFrownR
+12 MouthFunnel          13 MouthLeft             14 MouthLowerDownL
+15 MouthLowerDownR      16 MouthPressL           17 MouthPressR
+18 MouthPucker          19 MouthRight            20 MouthRollLower
+21 MouthRollUpper       22 MouthShrugLower       23 MouthShrugUpper
+24 MouthSmileL          25 MouthSmileR           26 MouthStretchL
+27 MouthStretchR        28 MouthUpperUpL         29 MouthUpperUpR
+30 NoseSneerL           31 NoseSneerR            32 TongueOut
+33 TongueLeft           34 TongueRight           35 TongueUp
+36 TongueDown           37 CheekPuffLeft         38 CheekPuffRight
+39 CheekSuckLeft        40 CheekSuckRight        41 MouthTightenerLeft
+42 MouthTightenerRight  43 TongueRoll            44 MouthUpperLeft
+45 MouthUpperRight      46 MouthLowerLeft        47 MouthLowerRight
+48 LipFunnelUpper       49 LipFunnelLower
+```
+
+state 0至少有一位有效，设位字段须有限且在`[0,1]`内。未设位表示未支持／未知，不表示测得中性；发送端须将其值写0，接收端不向SDK写入这些未训练预测。state 1必须mask为0且50项值全0，源身份、时间和源年龄仍保留。其他状态、超出50位的mask、不一致的mask、非有限／越界值、未知字段非零及错误长度／包头均被拒绝，不延长有效期。
+
+### 顺序与释放
+
+TJR与MFR使用同一接收器、同一份顺序记录。同一会话内seq必须递增，有效结果的`mouth_sensor_ns`也须推进。释放允许沿用最后seq，旧seq释放不能清掉更新结果；释放不算新图，也不推进源时间锚。同会话之后可用更新seq恢复。被替换的会话退役，不能再次接管。
+
+一次监听生命周期内只允许升级到MFR：接纳MFR1后拒绝所有TJR1／TJR2，包括从未出现过的旧协议会话。过期或MFR释放不会重新允许TJR接管。若主动退回TJR，需要重建监听，例如停用再启用模块；新的接收器不继承旧输出。
+
+结果期限从图像源计算为350 ms，而非每次到包后重新计350 ms。初始剩余量为`350 - source_age_ms`；接收器将图像时钟锚定到本机单调时间，后续只能收紧锚，不能往后移动以掩盖积压。重复包、seq增加但sensor时间不推进／倒退的包及过期包均不能续期。PC发包时间原样留作诊断，不直接与头显时间相减。
+
+### SDK映射
+
+模块唯一的`Write`边界先写本帧PICO结果，再由有效MFR字段覆盖对应嘴部目标。前33项复用`NeutralFaceMapper`映射，其余按同名SDK字段写入；`LipFunnelUpper/Lower`分别复制给该唇左右两个Funnel字段。
+
+独立左右CheekPuff、上下唇横移和上下唇Funnel只在自身有效时覆盖聚合量的对应目标。例如只有`MouthUpperLeft`有效，不会清掉未知的`MouthLowerLeft`：下唇保留有效聚合`MouthLeft`，聚合也未知时使用本帧PICO下唇结果。
+
+MFR的全部值直接作为`[0,1]`控制量，不使用旧TJR舌头存在阈值、方向缩放、额外乘TongueOut、legacy 0.99上限或PICO后处理规则。TongueOut为0或未知，也不会取消独立有效的方向／Roll。
+
+有效位消失、过期、释放、暂停、异常或teardown时，原有嘴部目标回到本帧PICO管线输出；额外SDK字段仅清除本适配器真正写入过的位，未拥有扩展保留原SDK值。`ownsFace=false`时不改任何嘴部值。这些映射使用官方SDK5／6已有通道，无需修改宿主或枚举。
+
+### 合成互通测试
+
+`tools/test-mouth-wire.py --dll <TongueTests.dll> --pc-wire <pc-tongue/wire.py> --output <新目录>`直接导入实际`face_result_packet`编码器，验证全部50个单独有效位、聚合与独立量优先级、未知字段、顺序、释放、过期、来源所有权和UDP端口释放。加`--batch-only`可跳过UDP。
+
+`TongueTests.dll --mfr-batch <cases.jsonl> <result.json>`提供确定性SDK写入断言。每行JSON可含`packet`（base64数据报）、`advanceMs`（本机单调时间推进毫秒）、`ownsFace`、预期`accepted`／`reason`及`expected`（官方SDK字段名→值）。不带packet的行用于验证过期。合成PICO回退值为JawOpen 0.23、TongueOut 0.17，其余原有嘴项为0；未写过的SDK字段初始为0.731。结果包含schema、字段顺序和每一步SDK快照；不加载模型或宿主UI。
 
 ## 验证状态
 

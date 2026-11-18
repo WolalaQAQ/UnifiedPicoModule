@@ -26,6 +26,7 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
     private double lastError;
     private TongueReceiver? tongue;
     private TjrUdpReceiver? tongueTransport;
+    private readonly MouthSdkAdapter mouthAdapter = new();
 
     [StructLayout(LayoutKind.Sequential)]
     private struct PowerThrottlingState { public uint Version, ControlMask, StateMask; }
@@ -175,18 +176,23 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
         {
             tongueTransport = new(receiver, config.Tongue.Port, log: Log);
             tongue = receiver;
-            Log($"Tongue TJR1: listening on 127.0.0.1:{tongueTransport.Port}; PC app output, expiry350ms.");
+            Log($"PC results TJR1/TJR2/MFR1: listening on 127.0.0.1:{tongueTransport.Port}; expiry350ms.");
         }
         catch (System.Net.Sockets.SocketException error)
         {
             receiver.Dispose();
-            Log($"Tongue TJR1 unavailable; normal PICO tracking continues: {error.Message}");
+            Log($"PC results TJR1/TJR2/MFR1 unavailable; normal PICO tracking continues: {error.Message}");
         }
     }
     private void StopTongue()
     {
         try { tongueTransport?.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
-        finally { tongueTransport = null; tongue?.Dispose(); tongue = null; }
+        finally
+        {
+            tongueTransport = null;
+            mouthAdapter.RememberMode(tongue?.Snapshot());
+            tongue?.Dispose(); tongue = null;
+        }
     }
     private void RestoreTimerPolicy()
     {
@@ -216,7 +222,8 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
         var data = UnifiedTracking.Data;
         foreach (var (channel, sdk) in Channels)
             if (ExpressionFrame.IsEye(channel) ? ownsEye : ownsFace) data.Shapes[(int)sdk].Weight = output.Expressions[channel];
-        TongueSdkAdapter.Apply(tongue, data, ownsFace, output.Expressions[ExpressionChannel.TongueOut], config.LegacyExpressionCeiling);
+        mouthAdapter.Apply(tongue?.Snapshot(), data, ownsFace, output.Expressions[ExpressionChannel.TongueOut],
+            config.LegacyExpressionCeiling);
         if (!ownsEye) return;
         data.Eye.Left.Gaze.x = output.Left.GazeX; data.Eye.Left.Gaze.y = output.Left.GazeY;
         data.Eye.Left.Openness = output.Left.Openness; data.Eye.Left.PupilDiameter_MM = SdkPupil(output.Left);

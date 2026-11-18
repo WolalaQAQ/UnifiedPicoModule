@@ -39,6 +39,8 @@ public static class NeutralFaceMapper
         (P.TongueOut, [C.TongueOut])
     ];
 
+    internal static IReadOnlyList<C> OutputsFor(P input) => Bindings.First(binding => binding.Input == input).Outputs;
+
     public static ExpressionFrame Map(RawFace raw)
     {
         var result = new ExpressionFrame();

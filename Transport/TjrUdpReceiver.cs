@@ -34,7 +34,7 @@ public sealed class TjrUdpReceiver : IAsyncDisposable
             }
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
-        catch (SocketException error) { log?.Invoke($"Tongue TJR1 receive stopped: {error.Message}"); }
+        catch (SocketException error) { log?.Invoke($"PC results TJR1/TJR2/MFR1 receive stopped: {error.Message}"); }
         finally { receiver.Stop(); }
     }
 

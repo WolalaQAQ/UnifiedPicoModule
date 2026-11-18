@@ -5,28 +5,37 @@ namespace UnifiedPicoModule.Protocol;
 public enum TongueState : uint { Present = 1, Absent = 2, Uncertain = 4, Invalid = 8, Stop = 16 }
 
 public sealed record TjrPacket(ulong SessionId, ulong SourceSeq, ulong MouthSensorNs, ulong EmittedPcNs,
-    float Left, float Right, float Out, float SourceAgeMs, TongueState State)
+    float Left, float Right, float Out, float SourceAgeMs, TongueState State,
+    bool Extended = false, float Up = 0, float Down = 0, float Roll = 0)
 {
     public const int Size = 64;
+    public const int ExtendedSize = 80;
 
     public static bool TryParse(ReadOnlySpan<byte> bytes, out TjrPacket? packet, out string error)
     {
         packet = null;
-        if (bytes.Length != Size) { error = "length"; return false; }
-        if (!bytes[..4].SequenceEqual("TJR1"u8) || BinaryPrimitives.ReadUInt16LittleEndian(bytes[4..]) != 1 ||
-            BinaryPrimitives.ReadUInt16LittleEndian(bytes[6..]) != Size)
+        if (bytes.Length is not (Size or ExtendedSize)) { error = "length"; return false; }
+        bool extended = bytes.Length == ExtendedSize;
+        if (!bytes[..4].SequenceEqual(extended ? "TJR2"u8 : "TJR1"u8) ||
+            BinaryPrimitives.ReadUInt16LittleEndian(bytes[4..]) != (extended ? 2 : 1) ||
+            BinaryPrimitives.ReadUInt16LittleEndian(bytes[6..]) != bytes.Length)
         { error = "header"; return false; }
-        if (BinaryPrimitives.ReadUInt32LittleEndian(bytes[60..]) != 0)
+        if (BinaryPrimitives.ReadUInt32LittleEndian(bytes[60..]) != 0 ||
+            extended && BinaryPrimitives.ReadUInt32LittleEndian(bytes[76..]) != 0)
         { error = "reserved"; return false; }
         var parsed = new TjrPacket(BinaryPrimitives.ReadUInt64LittleEndian(bytes[8..]),
             BinaryPrimitives.ReadUInt64LittleEndian(bytes[16..]), BinaryPrimitives.ReadUInt64LittleEndian(bytes[24..]),
             BinaryPrimitives.ReadUInt64LittleEndian(bytes[32..]), BinaryPrimitives.ReadSingleLittleEndian(bytes[40..]),
             BinaryPrimitives.ReadSingleLittleEndian(bytes[44..]), BinaryPrimitives.ReadSingleLittleEndian(bytes[48..]),
-            BinaryPrimitives.ReadSingleLittleEndian(bytes[52..]), (TongueState)BinaryPrimitives.ReadUInt32LittleEndian(bytes[56..]));
+            BinaryPrimitives.ReadSingleLittleEndian(bytes[52..]), (TongueState)BinaryPrimitives.ReadUInt32LittleEndian(bytes[56..]),
+            extended, extended ? BinaryPrimitives.ReadSingleLittleEndian(bytes[64..]) : 0,
+            extended ? BinaryPrimitives.ReadSingleLittleEndian(bytes[68..]) : 0,
+            extended ? BinaryPrimitives.ReadSingleLittleEndian(bytes[72..]) : 0);
         if (parsed.SessionId == 0) { error = "session-zero"; return false; }
         if (parsed.State is not (TongueState.Present or TongueState.Absent or TongueState.Uncertain or TongueState.Invalid or TongueState.Stop))
         { error = "state"; return false; }
         if (!Unit(parsed.Left) || !Unit(parsed.Right) || !Unit(parsed.Out) ||
+            !Unit(parsed.Up) || !Unit(parsed.Down) || !Unit(parsed.Roll) ||
             !float.IsFinite(parsed.SourceAgeMs) || parsed.SourceAgeMs < 0)
         { error = "numeric"; return false; }
         packet = parsed; error = ""; return true;
@@ -36,10 +45,10 @@ public sealed record TjrPacket(ulong SessionId, ulong SourceSeq, ulong MouthSens
 
     public byte[] Encode()
     {
-        var bytes = new byte[Size];
-        "TJR1"u8.CopyTo(bytes);
-        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(4), 1);
-        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(6), Size);
+        var bytes = new byte[Extended ? ExtendedSize : Size];
+        (Extended ? "TJR2"u8 : "TJR1"u8).CopyTo(bytes);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(4), (ushort)(Extended ? 2 : 1));
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(6), (ushort)bytes.Length);
         BinaryPrimitives.WriteUInt64LittleEndian(bytes.AsSpan(8), SessionId);
         BinaryPrimitives.WriteUInt64LittleEndian(bytes.AsSpan(16), SourceSeq);
         BinaryPrimitives.WriteUInt64LittleEndian(bytes.AsSpan(24), MouthSensorNs);
@@ -49,6 +58,12 @@ public sealed record TjrPacket(ulong SessionId, ulong SourceSeq, ulong MouthSens
         BinaryPrimitives.WriteSingleLittleEndian(bytes.AsSpan(48), Out);
         BinaryPrimitives.WriteSingleLittleEndian(bytes.AsSpan(52), SourceAgeMs);
         BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(56), (uint)State);
+        if (Extended)
+        {
+            BinaryPrimitives.WriteSingleLittleEndian(bytes.AsSpan(64), Up);
+            BinaryPrimitives.WriteSingleLittleEndian(bytes.AsSpan(68), Down);
+            BinaryPrimitives.WriteSingleLittleEndian(bytes.AsSpan(72), Roll);
+        }
         return bytes;
     }
 }

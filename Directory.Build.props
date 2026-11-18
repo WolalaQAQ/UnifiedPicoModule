@@ -2,5 +2,7 @@
   <PropertyGroup>
     <!-- Do not expose the build machine's user directory through module debug paths. -->
     <PathMap>$(MSBuildThisFileDirectory)=/_/UnifiedPicoModule/</PathMap>
+    <!-- Explicit SDK references take precedence over DLLs in archived build outputs. -->
+    <AssemblySearchPath_UseCandidateAssemblyFiles>false</AssemblySearchPath_UseCandidateAssemblyFiles>
   </PropertyGroup>
 </Project>

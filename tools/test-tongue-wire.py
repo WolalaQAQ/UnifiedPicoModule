@@ -21,15 +21,17 @@ def main():
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     original = args.pc_wire
+    sys.path.insert(0, str(original.resolve().parent))
     snapshot = args.output/'pc_wire.py'
     shutil.copy2(original, snapshot)
     spec = importlib.util.spec_from_file_location('pc_wire', snapshot)
     wire = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = wire
     spec.loader.exec_module(wire)
-    def encode(session, seq, state=1, age=0.):
+    def encode(session, seq, state=1, age=0., extended=False):
         h = SimpleNamespace(session_id=session, source_seq=seq, mouth_sensor_ns=1_000_000_000+seq*11_111_111)
-        return wire.result_packet(h, state, .6, .1, .8, age)
+        return wire.result_packet(h, state, .6, .1, .8, age, **(
+            dict(extended=True, up=.7, down=.2, roll=.4) if extended else {}))
     cases = {}
     for no_face in (False, True):
         name = 'foreign-face' if no_face else 'pico-face'
@@ -53,7 +55,7 @@ def main():
                     row = messages.get(timeout=2)
                     rows.append(row)
                     if no_face:
-                        assert all(abs(row[k]-.731) < .00001 for k in ('out', 'left', 'right', 'up', 'down')), row
+                        assert all(abs(row[k]-.731) < .00001 for k in ('out', 'left', 'right', 'up', 'down', 'roll')), row
                     return row
                 first = send(encode(100, 10))
                 if not no_face:
@@ -78,7 +80,19 @@ def main():
                     assert abs(invalid['out']-.17) < .00001
                 assert send(encode(300, 2, age=400))['reason'] == 'stale-source'
                 assert send(encode(300, 3)[:25])['reason'] == 'reject-length'
-                assert send(encode(300, 2, 16))['accepted']
+                extended = send(encode(400, 1, extended=True))
+                if not no_face:
+                    for key, value in [('up', .7), ('down', .2), ('roll', .4)]:
+                        assert abs(extended[key]-value) < .00001, extended
+                absent = send(encode(400, 2, 2, extended=True))
+                if not no_face:
+                    assert all(absent[k] == 0 for k in ('out', 'left', 'right', 'up', 'down', 'roll')), absent
+                assert not send(encode(400, 1, extended=True))['accepted']
+                send(encode(400, 3, extended=True))
+                legacy = send(encode(500, 1))
+                if not no_face:
+                    assert legacy['up'] == legacy['down'] == legacy['roll'] == 0, legacy
+                assert send(encode(500, 1, 16))['accepted']
             assert messages.get(timeout=3)['socket_released']
             process.wait(timeout=3)
             reader.join(1)
@@ -96,7 +110,7 @@ def main():
                 process.wait(3)
     result = {'passed': all(v['passed'] for v in cases.values()), 'cases': cases,
               'pc_wire_unchanged': snapshot.read_bytes() == original.read_bytes(),
-              'coverage': 'Synthetic TJR1 packets from the actual PC-app encoder to production C# and real SDK Write; no model, headset or host UI'}
+              'coverage': 'Synthetic TJR1/TJR2 packets from the actual PC-app encoder to production C# and real SDK Write; no model, headset or host UI'}
     (args.output/'result.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
     print(json.dumps(result, indent=2))
     assert result['pc_wire_unchanged']

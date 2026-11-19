@@ -73,6 +73,7 @@ PICO 头显的追踪数据可以通过多种发送端输出，包括 PicoFacialB
 | `Streaming.LocalOnly` | `true` | 仅接受本机发出的串流数据。PICO Connect 在本机运行，通常无需修改 |
 | `Tongue.Enabled` / `Tongue.Port` | `true` / `45682` | 仅当本模块拥有面部输出权时，从IPv4环回地址接收PC整嘴回归或兼容舌头结果 |
 | `Tongue.MouthMode` | `Hybrid` | 混合模式优先使用原厂有效新鲜嘴部标量、模型补缺；`ModelOnly`完整模式只用模型，未知／过期字段清除 |
+| `Tongue.HybridChannels` | `null` | `Hybrid`模式下为`null`表示全部33个原生嘴部通道都走原生优先；填通道名数组时仅列表内通道走Hybrid，其余只用模型 |
 
 完整的字段说明、取值范围和默认值请参阅[配置说明](docs/configuration_zh.md)。
 

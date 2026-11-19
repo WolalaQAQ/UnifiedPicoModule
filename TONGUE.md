@@ -14,7 +14,7 @@ Use `feat/tongue-pc` in both this repository and [PicoET-Enhance](https://github
 The configuration section defaults to:
 
 ```json
-"Tongue": { "Enabled": true, "Port": 45682, "MouthMode": "Hybrid" }
+"Tongue": { "Enabled": true, "Port": 45682, "MouthMode": "Hybrid", "HybridChannels": null }
 ```
 
 `Port` accepts 1–65535; invalid values fall back to 45682. Omitted settings use defaults without rewriting an existing file. `Enabled=false` disables the receiver. The bind address is always IPv4 loopback. Bind failure is logged and leaves normal PICO tracking running. Configuration changes take effect on module initialization.
@@ -31,6 +31,8 @@ End-to-end models use 256-byte MFR1 with the `pico-mouth50-v1` schema on the sam
 | `ModelOnly` | Use only fresh model fields. Unknown fields, release, disconnection and expiry clear the owned mouth schema, even when native values exist |
 
 Set this one field in the module JSON and reinitialize the module/restart VRCFT to apply it. Old configurations that omit it use `Hybrid` without being rewritten. ModelOnly also clears the mouth before its first model result or when the receiver cannot bind; it never falls back to native output. The PC service sends model results only and has no second mode selector.
+
+When `MouthMode` is `Hybrid`, optional `Tongue.HybridChannels` controls which of the 33 native mouth channels (`CheekPuff` through `TongueOut`) prefer native observations: `null` (default) uses all 33 native-capable channels in Hybrid; a non-null list (for example `["JawOpen", "MouthFunnel", "MouthPucker"]` or `[]`) restricts native-first Hybrid to only the listed channels, while all other mouth channels use valid model fields and clear to `0` on expiry without native fallback. Extended channels (`33..49`) and duplicates are invalid in `HybridChannels` and fall back to `null` with a log message.
 
 Native support is checked against the actual fresh `RawFace` observation, its face validity, field presence and finite `[0,1]` value—not held pipeline values or synthetic post-processing output. Aggregate CheekPuff, MouthLeft/Right and MouthFunnel fan-outs do not supply independently measured left/right cheeks, upper/lower lip movement or upper/lower Funnel: valid independent model fields may replace those proxies in Hybrid. Eyes retain their existing source. When another module such as Cymple owns the mouth, neither mode writes or clears its fields.
 

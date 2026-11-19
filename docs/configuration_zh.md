@@ -137,7 +137,7 @@ Streaming 接收器处理 PICO Connect 等发送端的串流格式。端口固�
 
 ## Tongue
 
-`MouthMode`可选`"Hybrid"`（默认，原厂有效新鲜值优先、模型补缺）或`"ModelOnly"`（嘴部只用模型，未知／过期字段清除）。旧JSON缺省采用Hybrid，不改写文件。这是唯一的整嘴模式选择，眼源及VRCFT嘴部所有权独立。详见[整嘴模式](../TONGUE_zh.md#mfr1整嘴输出)。
+`MouthMode`可选`"Hybrid"`（默认，原厂有效新鲜值优先、模型补缺）或`"ModelOnly"`（嘴部只用模型，未知／过期字段清除）。旧JSON缺省采用Hybrid，不改写文件。`Hybrid`模式下可选配置`HybridChannels`（默认`null`），接受不重复的原生`MouthChannel`名称数组（`CheekPuff`至`TongueOut`）；仅数组内通道走原生优先Hybrid，未列出的通道与`ModelOnly`一致。出现重复或扩展通道（33–49）时记录日志并重置为`null`。眼源及VRCFT嘴部所有权独立。详见[整嘴模式](../TONGUE_zh.md#mfr1整嘴输出)。
 
 `Enabled`默认`true`；`Port`默认`45682`，范围1–65535，非法值回退45682。绑定地址始终为`127.0.0.1`，只有本模块拥有面部输出权时才打开接收器。省略时采用默认值，不改写已有文件。PC舌头结果始终在最多350ms后过期，不受`Stale.NeutralizeOnTimeout`影响。详见[PC舌头说明](../TONGUE_zh.md)。
 

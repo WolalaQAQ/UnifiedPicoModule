@@ -76,7 +76,7 @@ TJR与MFR使用同一接收器、同一份顺序记录。同一会话内seq必�
 
 ### SDK映射
 
-模块唯一的`Write`边界按`Tongue.MouthMode`合并：Hybrid逐项优先采用存在、有效且新鲜的原厂标量（包括0），不足处用模型有效新鲜值；ModelOnly只用MFR值。前33项复用`NeutralFaceMapper`映射，其余按同名SDK字段写入；`LipFunnelUpper/Lower`分别复制给该唇左右两个Funnel字段。
+模块唯一的`Write`边界按`Tongue.MouthMode`与`Tongue.HybridChannels`合并：Hybrid模式下，对`HybridChannels`允许的原生通道（默认`null`表示全部33项）逐项优先采用存在、有效且新鲜的原厂标量（包括0），其余通道及缺失处用模型有效新鲜值；ModelOnly全部嘴部只用MFR值。前33项复用`NeutralFaceMapper`映射，其余按同名SDK字段写入；`LipFunnelUpper/Lower`分别复制给该唇左右两个Funnel字段。
 
 独立左右CheekPuff、上下唇横移和上下唇Funnel只在自身有效时覆盖聚合量的对应目标。只有`MouthUpperLeft`有效时，下唇使用有效聚合量、混合模式下新鲜的原厂代理值，或在两者均缺失时清零。原厂扇出复制不算独立观测。
 

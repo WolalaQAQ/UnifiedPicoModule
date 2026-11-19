@@ -6,7 +6,8 @@
   "Tongue": {
     "Enabled": true,
     "Port": 45682,
-    "MouthMode": "Hybrid"
+    "MouthMode": "Hybrid",
+    "HybridChannels": null
   },
   "Bridge": {
     "IP": null,

@@ -76,7 +76,7 @@ The lease is 350 ms from the image source, not 350 ms from every arrival. Initia
 
 ### SDK mapping
 
-At the module's sole `Write` boundary, `Tongue.MouthMode=Hybrid` uses present, valid, fresh native scalars first (zero included), then fills missing controls from valid fresh MFR fields. `ModelOnly` uses only MFR fields. The first 33 controls reuse `NeutralFaceMapper` correspondence. Extra controls map directly by name, except each `LipFunnelUpper/Lower` is copied to that lip's left and right Funnel channels.
+At the module's sole `Write` boundary, `Tongue.MouthMode=Hybrid` uses present, valid, fresh native scalars first (zero included) for channels enabled by `Tongue.HybridChannels` (`null` means all 33 native mouth channels), then fills missing or model-only controls from valid fresh MFR fields. `ModelOnly` uses only MFR fields for all mouth channels. The first 33 controls reuse `NeutralFaceMapper` correspondence. Extra controls map directly by name, except each `LipFunnelUpper/Lower` is copied to that lip's left and right Funnel channels.
 
 Independent supported CheekPuff, upper/lower horizontal, and upper/lower Funnel values take precedence over aggregate fan-out only for their own targets. A valid `MouthUpperLeft` leaves the lower lip at its valid aggregate value, a fresh native proxy in Hybrid, or zero if neither is available. Native fan-out is not independent measurement.
 

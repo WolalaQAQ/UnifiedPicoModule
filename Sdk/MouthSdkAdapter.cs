@@ -45,11 +45,24 @@ public sealed class MouthSdkAdapter
         return result;
     }
 
+    private static ulong HybridMask(IReadOnlyCollection<MouthChannel>? hybridChannels)
+    {
+        if (hybridChannels is null) return ulong.MaxValue;
+        ulong mask = 0;
+        foreach (var channel in hybridChannels)
+            if ((int)channel is >= 0 and < 33) mask |= 1UL << (int)channel;
+        return mask;
+    }
+
+    private static bool UsesNativeFirst(MouthMode mode, ulong hybridMask, MouthChannel channel) =>
+        mode == MouthMode.Hybrid && (int)channel < 33 && (hybridMask & (1UL << (int)channel)) != 0;
+
     public void Apply(TongueView? view, UnifiedTrackingData data, bool ownsFace, TrackingOutput output,
-        MouthMode mode, bool legacyExpressionCeiling = false)
+        MouthMode mode, bool legacyExpressionCeiling = false, IReadOnlyCollection<MouthChannel>? hybridChannels = null)
     {
         if (!ownsFace) { ownedExtensions.Clear(); return; }
         RememberMode(view);
+        ulong hybridMask = mode == MouthMode.Hybrid ? HybridMask(hybridChannels) : 0;
         var next = new HashSet<U>();
         if (!legacyMode || mode == MouthMode.ModelOnly)
         {
@@ -59,7 +72,7 @@ public sealed class MouthSdkAdapter
             foreach (var sdk in MouthTargets) data.Shapes[(int)sdk].Weight = 0;
             if (mode == MouthMode.Hybrid && output.FreshMouth is { } raw)
                 foreach (var channel in Enum.GetValues<MouthChannel>().Take(33))
-                    if (NativeAvailable(raw, channel))
+                    if (UsesNativeFirst(mode, hybridMask, channel) && NativeAvailable(raw, channel))
                         foreach (var sdk in Bindings[(int)channel])
                             data.Shapes[(int)sdk].Weight = output.Expressions[Enum.Parse<ExpressionChannel>(sdk.ToString())];
             if (view is { Override: true, Mouth: { } packet })
@@ -69,7 +82,7 @@ public sealed class MouthSdkAdapter
                 foreach (var channel in Enum.GetValues<MouthChannel>())
                 {
                     if (!packet.Has(channel)) continue;
-                    if (mode == MouthMode.Hybrid && (int)channel < 33 &&
+                    if (UsesNativeFirst(mode, hybridMask, channel) &&
                         NativeAvailable(output.FreshMouth, channel)) continue;
                     foreach (var sdk in Bindings[(int)channel])
                     {

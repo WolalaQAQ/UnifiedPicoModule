@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using UnifiedPicoModule.Core;
+using UnifiedPicoModule.Protocol;
 
 namespace UnifiedPicoModule.Configuration;
 
@@ -21,6 +22,27 @@ public static class ConfigValidator
         if (!Enum.IsDefined(config.Tongue.MouthMode))
         { log($"Tongue.MouthMode={config.Tongue.MouthMode} 未知；使用 Hybrid。"); config.Tongue.MouthMode = MouthMode.Hybrid; }
         config.Tongue.Port = Integer(config.Tongue.Port, 1, 65535, 45682, "Tongue.Port", log);
+        if (config.Tongue.HybridChannels is { } hybridChannels)
+        {
+            var seen = new HashSet<MouthChannel>();
+            var hybridValid = true;
+            foreach (var channel in hybridChannels)
+            {
+                if (!Enum.IsDefined(channel) || (int)channel is < 0 or >= 33)
+                {
+                    log($"Tongue.HybridChannels 包含不支持原生输出的通道 {channel}；仅支持 0–32 原生通道，回退为全部 33 个原生通道 (null)。");
+                    hybridValid = false;
+                    break;
+                }
+                if (!seen.Add(channel))
+                {
+                    log($"Tongue.HybridChannels 包含重复通道 {channel}；回退为全部 33 个原生通道 (null)。");
+                    hybridValid = false;
+                    break;
+                }
+            }
+            if (!hybridValid) config.Tongue.HybridChannels = null;
+        }
         config.Bridge.IP = Address(config.Bridge.IP, null, "Bridge.IP", log);
         config.Streaming.IP = Address(config.Streaming.IP, null, "Streaming.IP", log);
         config.Bridge.ListenAddress = Address(config.Bridge.ListenAddress, "0.0.0.0", "Bridge.ListenAddress", log)!;

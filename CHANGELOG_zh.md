@@ -5,6 +5,7 @@
 ## [Unreleased] - 2026-11-19
 
 ### 新增
+- 增加`Tongue.HybridChannels`：在`Hybrid`模式下按通道指定走原生优先的名单（默认`null`为全部33个原生嘴部通道；数组形式则仅列表内通道优先使用新鲜原生标量，其余只用模型）。
 - 增加`Tongue.MouthMode`：默认Hybrid逐项优先使用原厂有效新鲜标量（包括0），不足处用模型有效值；ModelOnly不回退原厂，清除未知／过期嘴部字段。
 - 在环回UDP45682接收PC本机TJR1舌头结果，用`Tongue.Enabled`／`Tongue.Port`配置。
 - 增加生产接收器、SDK所有权、生命周期及真实Python编码器互通测试。

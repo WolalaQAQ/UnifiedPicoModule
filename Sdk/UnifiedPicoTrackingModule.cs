@@ -59,7 +59,8 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
             }
             ModuleInformation.Active = true;
             config = ConfigStore.Load(Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location)!, "UnifiedPicoModule.json"), Log);
-            Log($"Whole-mouth mode: {config.Tongue.MouthMode}; fresh native scalars first in Hybrid, model only in ModelOnly.");
+            string hybridDesc = config.Tongue.HybridChannels is { } hc ? $"{hc.Count} selected native channels" : "all 33 native channels";
+            Log($"Whole-mouth mode: {config.Tongue.MouthMode} ({hybridDesc}); fresh native scalars first for Hybrid channels, model only otherwise.");
             Log("Eye sources: gaze from the EyeLook shapes; openness from 1 - EyeBlink; native eye packets supply a measured pupil diameter.");
             Log($"Timeout neutralization: {(config.Stale.NeutralizeOnTimeout ? "enabled" : "disabled; hold last values")}.");
             var enabledRules = typeof(PostProcessingSettings).GetProperties().Where(p =>
@@ -224,7 +225,7 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
         foreach (var (channel, sdk) in Channels)
             if (ExpressionFrame.IsEye(channel) ? ownsEye : ownsFace) data.Shapes[(int)sdk].Weight = output.Expressions[channel];
         mouthAdapter.Apply(tongue?.Snapshot(), data, ownsFace, output, config.Tongue.MouthMode,
-            config.LegacyExpressionCeiling);
+            config.LegacyExpressionCeiling, config.Tongue.HybridChannels);
         if (!ownsEye) return;
         data.Eye.Left.Gaze.x = output.Left.GazeX; data.Eye.Left.Gaze.y = output.Left.GazeY;
         data.Eye.Left.Openness = output.Left.Openness; data.Eye.Left.PupilDiameter_MM = SdkPupil(output.Left);

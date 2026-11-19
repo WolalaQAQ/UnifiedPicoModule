@@ -14,7 +14,7 @@
 新增配置默认值：
 
 ```json
-"Tongue": { "Enabled": true, "Port": 45682, "MouthMode": "Hybrid" }
+"Tongue": { "Enabled": true, "Port": 45682, "MouthMode": "Hybrid", "HybridChannels": null }
 ```
 
 `Port`范围1–65535，非法值回退45682。省略时采用默认值，不改写已有文件；`Enabled=false`关闭接收器。地址固定为IPv4环回。绑定失败会记录日志，正常PICO追踪继续。配置只在模块初始化时读取。
@@ -31,6 +31,8 @@
 | `ModelOnly`（完整模型） | 嘴部只使用模型；未知字段、释放、断流和过期均清除本模块拥有的嘴部字段，即使头显仍有数值 |
 
 在模块JSON中修改这一个字段，重新初始化模块／重启VRCFT后生效。旧配置缺省为`Hybrid`，原文件不改写。ModelOnly在首个模型结果前或接收器绑定失败时同样清除嘴部，不回退头显。PC服务只发送模型结果，没有第二套模式选择。
+
+当`MouthMode`为`Hybrid`时，可通过可选的`Tongue.HybridChannels`按通道指定哪些原生嘴部通道（`CheekPuff`到`TongueOut`共33项）走原生优先：默认为`null`（全部33项都走Hybrid）；设为非空列表（例如`["JawOpen", "MouthFunnel", "MouthPucker"]`）或空列表`[]`时，只有列表内的通道优先采用新鲜原生标量，其余所有嘴部通道均只使用模型有效值并在过期时清零、不回退原生。列表包含扩展通道（33–49）或重复项时记入日志并回退为`null`。
 
 原厂支持依据当前新鲜`RawFace`观测的面部有效位、字段存在性和有限`[0,1]`值，不依据管线保留值或后处理合成输出。CheekPuff、MouthLeft/Right、MouthFunnel的扇出复制不提供独立左右鼓腮、上下唇横移或上下Funnel观测，混合模式仍允许模型独立字段覆盖这些代理值。眼源保持原路径；Cymple等其他模块拥有嘴部时，两模式都不写也不清其字段。
 

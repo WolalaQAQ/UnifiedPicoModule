@@ -5,6 +5,7 @@ English | [简体中文](CHANGELOG_zh.md)
 ## [Unreleased] - 2026-11-19
 
 ### Features
+- Add `Tongue.HybridChannels`: optional native-channel whitelist under `Hybrid` (`null` = all 33 native mouth channels; array = only listed channels prefer fresh native scalars while the rest use model-only behavior).
 - Add `Tongue.MouthMode`: default Hybrid prefers each valid fresh native scalar (zero included) and fills gaps from valid model fields; ModelOnly uses no native fallback and clears unknown/expired mouth fields.
 - Accept PC-local TJR1 tongue results on loopback UDP45682, configurable through `Tongue.Enabled` / `Tongue.Port`.
 - Add production receiver, SDK ownership, lifecycle and actual Python encoder interoperability tests.

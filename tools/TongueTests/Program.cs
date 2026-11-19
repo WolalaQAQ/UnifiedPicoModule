@@ -203,6 +203,64 @@ Test("model_only_never_falls_back_and_real_mode_switches_clear_previous_fields",
     Set(module, "ownsFace", false); Sentinel(); Call(module, "Write", output);
     Check(UnifiedTracking.Data.Shapes.All(s => s.Weight == .731f)); module.Teardown();
 });
+Test("hybrid_channels_subset_routes_selected_to_native_and_others_to_model_only", () => {
+    var module = Module(); Sentinel(); var config = new ModuleConfig();
+    config.Tongue.MouthMode = MouthMode.Hybrid;
+    config.Tongue.HybridChannels = [MouthChannel.JawOpen, MouthChannel.MouthFunnel];
+    Set(module, "config", config); double now = 1000;
+    using var receiver = new TongueReceiver(() => now); Set(module, "tongue", receiver);
+    var values = new float[52]; var present = Enumerable.Repeat(true, 52).ToArray();
+    var frame = new ExpressionFrame();
+    frame[ExpressionChannel.JawOpen] = .23f;
+    frame[ExpressionChannel.LipFunnelUpperLeft] = .23f; frame[ExpressionChannel.LipFunnelUpperRight] = .23f;
+    frame[ExpressionChannel.LipFunnelLowerLeft] = .23f; frame[ExpressionChannel.LipFunnelLowerRight] = .23f;
+    frame[ExpressionChannel.MouthCornerPullLeft] = .80f; frame[ExpressionChannel.MouthCornerSlantLeft] = .80f;
+    frame[ExpressionChannel.TongueOut] = .90f;
+    var fresh = new TrackingOutput(frame, new(), new(), new RawFace(values, present, true, true, 1, 1));
+    SendMouth(receiver, MouthPacket(seq: 1, mask: MfrPacket.AllValid & ~Mask(MouthChannel.LipFunnelUpper, MouthChannel.LipFunnelLower)));
+    Call(module, "Write", fresh);
+    Near(Weight(UnifiedExpressions.JawOpen), .23f);
+    Near(Weight(UnifiedExpressions.LipFunnelUpperLeft), .23f);
+    Near(Weight(UnifiedExpressions.MouthCornerPullLeft), .50f);
+    Near(Weight(UnifiedExpressions.TongueOut), .66f);
+    SendMouth(receiver, MouthPacket(seq: 2, mask: MfrPacket.AllValid));
+    Call(module, "Write", fresh);
+    Near(Weight(UnifiedExpressions.JawOpen), .23f);
+    Near(Weight(UnifiedExpressions.LipFunnelLowerLeft), 1);
+    Near(Weight(UnifiedExpressions.MouthCornerPullLeft), .50f);
+    Near(Weight(UnifiedExpressions.TongueOut), .66f);
+    now += 351; Call(module, "Write", fresh);
+    Near(Weight(UnifiedExpressions.JawOpen), .23f);
+    Near(Weight(UnifiedExpressions.LipFunnelUpperLeft), .23f);
+    Near(Weight(UnifiedExpressions.MouthCornerPullLeft), 0);
+    Near(Weight(UnifiedExpressions.TongueOut), 0);
+    module.Teardown();
+});
+Test("hybrid_channels_config_roundtrip_null_empty_and_validation", () => {
+    string path = Path.Combine(Path.GetTempPath(), "pico-hybrid-config-" + Guid.NewGuid() + ".json");
+    try {
+        ConfigStore.SaveNew(path, new ModuleConfig());
+        var logs = new List<string>();
+        var read = ConfigStore.ReadOnly(path, logs.Add);
+        Check(read.Tongue.HybridChannels is null && logs.All(m => m.StartsWith("启用 ", StringComparison.Ordinal)), "SaveNew null roundtrip failed");
+
+        File.WriteAllText(path, "{\"ConfigVersion\":1,\"Tongue\":{\"HybridChannels\":[]}}");
+        logs.Clear(); read = ConfigStore.ReadOnly(path, logs.Add);
+        Check(read.Tongue.HybridChannels is { Count: 0 } && logs.All(m => m.StartsWith("启用 ", StringComparison.Ordinal)));
+
+        File.WriteAllText(path, "{\"ConfigVersion\":1,\"Tongue\":{\"HybridChannels\":[\"JawOpen\",\"MouthPucker\"]}}");
+        logs.Clear(); read = ConfigStore.ReadOnly(path, logs.Add);
+        Check(read.Tongue.HybridChannels is [MouthChannel.JawOpen, MouthChannel.MouthPucker]);
+
+        File.WriteAllText(path, "{\"ConfigVersion\":1,\"Tongue\":{\"HybridChannels\":[\"JawOpen\",\"JawOpen\"]}}");
+        logs.Clear(); read = ConfigStore.ReadOnly(path, logs.Add);
+        Check(read.Tongue.HybridChannels is null && logs.Any(m => m.Contains("重复")));
+
+        File.WriteAllText(path, "{\"ConfigVersion\":1,\"Tongue\":{\"HybridChannels\":[\"TongueLeft\"]}}");
+        logs.Clear(); read = ConfigStore.ReadOnly(path, logs.Add);
+        Check(read.Tongue.HybridChannels is null && logs.Any(m => m.Contains("不支持原生输出")));
+    } finally { if (File.Exists(path)) File.Delete(path); }
+});
 Test("model_only_is_model_only_before_first_packet_and_when_receiver_disabled", () => {
     var module = Module(); Sentinel();
     var config = new ModuleConfig(); config.Tongue.MouthMode = MouthMode.ModelOnly;

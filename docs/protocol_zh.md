@@ -86,7 +86,7 @@ MFR的全部值直接作为`[0,1]`控制量，不使用旧TJR舌头存在阈值�
 
 ### 合成互通测试
 
-`tools/test-mouth-wire.py --dll <TongueTests.dll> --pc-wire <pc-tongue/wire.py> --output <新目录>`直接导入实际`face_result_packet`编码器，验证全部50个单独有效位、聚合与独立量优先级、未知字段、顺序、释放、过期、来源所有权和UDP端口释放。加`--batch-only`可跳过UDP。
+`tools/test-mouth-wire.py --dll <TongueTests.dll> --pc-wire <pc-studio/wire.py> --output <新目录>`直接导入实际`face_result_packet`编码器，验证全部50个单独有效位、聚合与独立量优先级、未知字段、顺序、释放、过期、来源所有权和UDP端口释放。加`--batch-only`可跳过UDP。
 
 `TongueTests.dll --mfr-batch <cases.jsonl> <result.json>`提供确定性SDK写入断言。每行JSON可含`packet`（base64数据报）、`advanceMs`（本机单调时间推进毫秒）、`ownsFace`、预期`accepted`／`reason`及`expected`（官方SDK字段名→值）。不带packet的行用于验证过期。这个纯结果fixture不提供新鲜原厂观测，嘴部缺项清除；无关SDK字段初始为0.731。结果包含schema、字段顺序和每一步SDK快照；不加载模型或宿主UI。
 

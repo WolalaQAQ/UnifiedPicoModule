@@ -86,7 +86,7 @@ Each whole-mouth write clears unknown targets in the owned 50-field schema. Mask
 
 ### Synthetic interoperability tests
 
-`tools/test-mouth-wire.py --dll <TongueTests.dll> --pc-wire <pc-tongue/wire.py> --output <new-directory>` imports the actual `face_result_packet` encoder. It checks all 50 individual mask bits, aggregate/independent precedence, unknown fields, ordering, release, expiry, face ownership and UDP socket release. `--batch-only` skips UDP.
+`tools/test-mouth-wire.py --dll <TongueTests.dll> --pc-wire <pc-studio/wire.py> --output <new-directory>` imports the actual `face_result_packet` encoder. It checks all 50 individual mask bits, aggregate/independent precedence, unknown fields, ordering, release, expiry, face ownership and UDP socket release. `--batch-only` skips UDP.
 
 `TongueTests.dll --mfr-batch <cases.jsonl> <result.json>` provides a deterministic SDK-write assertion API. Each JSONL row may contain `packet` (base64 datagram), `advanceMs` (local monotonic time increment), `ownsFace`, expected `accepted`/`reason`, and an `expected` dictionary of official SDK expression names to values. A row without a packet tests expiry. This result-only fixture provides no fresh native observation, so missing mouth values clear; unrelated SDK fields start at 0.731. The result contains the schema, ordered channels and each step's SDK snapshot. Tests do not load models or a host UI.
 

@@ -79,7 +79,7 @@ MouthLink推理仍在PC App中使用既有ORT后端，模块不增加原生运�
 
 ```powershell
 ./tools/test-tongue.ps1 -ArtifactsPath artifacts/tongue-check
-python tools/test-tongue-wire.py --dll artifacts/tongue-check/bin/TongueTests/release/TongueTests.dll --pc-wire ../PicoET-Enhance/pc-tongue/wire.py --output artifacts/tongue-wire
+python tools/test-tongue-wire.py --dll artifacts/tongue-check/bin/TongueTests/release/TongueTests.dll --pc-wire ../PicoET-Enhance/pc-studio/wire.py --output artifacts/tongue-wire
 ```
 
 第一项覆盖生产解析／状态机、真实SDK Write所有权、环回UDP及生命周期；第二项使用配套App的真实Python编码器与隔离C# probe，也覆盖外部面部所有权。两者只用临时环回端口，不加载日常VRCFT。每轮互通选择新的输出目录。

@@ -79,7 +79,7 @@ After `tools/build.ps1` prepares `.sdk/`:
 
 ```powershell
 ./tools/test-tongue.ps1 -ArtifactsPath artifacts/tongue-check
-python tools/test-tongue-wire.py --dll artifacts/tongue-check/bin/TongueTests/release/TongueTests.dll --pc-wire ../PicoET-Enhance/pc-tongue/wire.py --output artifacts/tongue-wire
+python tools/test-tongue-wire.py --dll artifacts/tongue-check/bin/TongueTests/release/TongueTests.dll --pc-wire ../PicoET-Enhance/pc-studio/wire.py --output artifacts/tongue-wire
 ```
 
 The first command tests the production parser/state machine, real SDK Write ownership, loopback UDP and lifecycle. The second uses the matching app's actual Python encoder and the isolated C# probe, including a foreign-face ownership case. Both use ephemeral loopback ports, not a running VRCFT installation. Use a new output directory for each wire check.

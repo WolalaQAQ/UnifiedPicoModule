@@ -16,7 +16,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dll', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--pc-wire', type=Path, required=True, help='pc-tongue/wire.py from the matching PicoET-Enhance branch')
+    parser.add_argument('--pc-wire', type=Path, required=True, help='pc-studio/wire.py from the matching PicoET-Enhance branch')
     parser.add_argument('--dotnet', default='dotnet')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)

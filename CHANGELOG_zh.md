@@ -2,9 +2,10 @@
 
 [English](CHANGELOG.md) | 简体中文
 
-## [Unreleased] - 2026-11-05
+## [Unreleased] - 2026-11-19
 
 ### 新增
+- 增加`Tongue.MouthMode`：默认Hybrid逐项优先使用原厂有效新鲜标量（包括0），不足处用模型有效值；ModelOnly不回退原厂，清除未知／过期嘴部字段。
 - 在环回UDP45682接收PC本机TJR1舌头结果，用`Tongue.Enabled`／`Tongue.Port`配置。
 - 增加生产接收器、SDK所有权、生命周期及真实Python编码器互通测试。
 - 接收PC App的MouthLink模型所发80字节TJR2，增加Up／Down／Roll，保留原样TJR1及共用新鲜度规则。
@@ -17,7 +18,7 @@
 - 视频、推理与个人流程由配套PicoET PC App完成，嘴部所有权留给VRCFT，SDK仍从模块原Write边界写入。
 - 新鲜absent为明确负例；invalid／stop／过期恢复当前原厂Out并清Left／Right，源年龄、sensor时间与序号阻止旧图续期。
 - 回归推理留在VRCFT外部，仅在接过TJR2后写扩展通道，并在过期、停止和切回TJR1时清除，避免姿态残留。
-- MFR1直接传递命名连续控制量，不沿用TJR的伸舌阈值或方向门控；未知字段不当成中性值，未支持的原厂通道保留当前PICO值。
+- MFR1直接传递命名连续控制量，不沿用TJR阈值或方向门控。来源有效性取自实际逐通道观测，不取管线保留值或聚合扇出代理；眼源及外部嘴部所有权独立。
 
 ### 注意事项
 - 混搭只眼动时不占舌头端口、不写外部嘴部；只用TJR1的实例不动Up／Down／Roll，不提供UDP19031订阅或原厂／模型最大值合并。

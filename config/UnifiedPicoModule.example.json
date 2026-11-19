@@ -5,7 +5,8 @@
   "DisableFaceTracking": false,
   "Tongue": {
     "Enabled": true,
-    "Port": 45682
+    "Port": 45682,
+    "MouthMode": "Hybrid"
   },
   "Bridge": {
     "IP": null,

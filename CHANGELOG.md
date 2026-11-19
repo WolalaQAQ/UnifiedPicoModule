@@ -2,9 +2,10 @@
 
 English | [简体中文](CHANGELOG_zh.md)
 
-## [Unreleased] - 2026-11-05
+## [Unreleased] - 2026-11-19
 
 ### Features
+- Add `Tongue.MouthMode`: default Hybrid prefers each valid fresh native scalar (zero included) and fills gaps from valid model fields; ModelOnly uses no native fallback and clears unknown/expired mouth fields.
 - Accept PC-local TJR1 tongue results on loopback UDP45682, configurable through `Tongue.Enabled` / `Tongue.Port`.
 - Add production receiver, SDK ownership, lifecycle and actual Python encoder interoperability tests.
 - Accept optional 80-byte TJR2 results with Up/Down/Roll for the PC app's MouthLink models, retaining the exact TJR1 format and common freshness rules.
@@ -17,7 +18,7 @@ English | [简体中文](CHANGELOG_zh.md)
 - Move video, inference and personalization to the paired PicoET PC app. Keep mouth ownership in VRCFT and SDK writes in the module's existing Write boundary.
 - Make fresh absent authoritative; invalid/stop/expiry restore the current native Out and clear Left/Right. Source age, sensor time and sequence prevent old images from renewing output.
 - Keep regression inference outside VRCFT. Extended channels are written only after a TJR2 result, then cleared on expiry, stop and return to TJR1 so poses cannot latch.
-- MFR1 carries named continuous controls directly, without legacy TJR tongue thresholds or direction gating. Unknown fields are not neutral measurements; unsupported stock channels retain the current PICO value.
+- MFR1 carries named continuous controls directly, without legacy TJR thresholds or direction gating. Source availability follows actual per-field observations, not held values or aggregate fan-out proxies; eyes and foreign mouth ownership remain independent.
 
 ### Notes & Caveats
 - Eye-only mixed tracking opens no tongue socket and writes no foreign mouth fields. TJR1-only instances leave Up/Down/Roll unchanged; no UDP19031 subscription or native/model maximum merge is included.

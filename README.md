@@ -72,6 +72,7 @@ If the file does not exist on first start, the module generates a default config
 | `AllowFallback` | `false` | Whether to switch to the other source when the current one becomes unavailable |
 | `Streaming.LocalOnly` | `true` | Accept streaming data only from the local machine. PICO Connect runs locally, so this normally does not need to be changed |
 | `Tongue.Enabled` / `Tongue.Port` | `true` / `45682` | Receive whole-mouth regression or compatible tongue results on IPv4 loopback only when this module owns face output |
+| `Tongue.MouthMode` | `Hybrid` | Prefer valid fresh native mouth scalars and fill gaps from the model; `ModelOnly` uses the model exclusively and clears unknown/expired fields |
 
 For the complete list of fields, valid ranges and defaults, see the [configuration reference](docs/configuration.md).
 

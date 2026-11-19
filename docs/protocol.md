@@ -76,19 +76,19 @@ The lease is 350 ms from the image source, not 350 ms from every arrival. Initia
 
 ### SDK mapping
 
-At the module's sole `Write` boundary, the current PICO frame is written first, then supported MFR controls overwrite their corresponding mouth targets. The first 33 controls reuse `NeutralFaceMapper` correspondence. The extra controls map directly by name, except each `LipFunnelUpper/Lower` is copied to that lip's left and right Funnel channels.
+At the module's sole `Write` boundary, `Tongue.MouthMode=Hybrid` uses present, valid, fresh native scalars first (zero included), then fills missing controls from valid fresh MFR fields. `ModelOnly` uses only MFR fields. The first 33 controls reuse `NeutralFaceMapper` correspondence. Extra controls map directly by name, except each `LipFunnelUpper/Lower` is copied to that lip's left and right Funnel channels.
 
-Independent supported CheekPuff, upper/lower horizontal, and upper/lower Funnel values take precedence over aggregate fan-out only for their own targets. For example, valid `MouthUpperLeft` does not erase an unsupported `MouthLowerLeft`: the lower lip retains the valid aggregate `MouthLeft`, or the current PICO lower-lip output when that aggregate is unsupported.
+Independent supported CheekPuff, upper/lower horizontal, and upper/lower Funnel values take precedence over aggregate fan-out only for their own targets. A valid `MouthUpperLeft` leaves the lower lip at its valid aggregate value, a fresh native proxy in Hybrid, or zero if neither is available. Native fan-out is not independent measurement.
 
 All MFR values are direct `[0,1]` controls. They do not use legacy TJR presence thresholds, direction scaling, multiplication by TongueOut, the legacy 0.99 ceiling, or PICO post-processing rules. In particular, zero/unsupported TongueOut does not cancel an independently valid direction or Roll.
 
-On mask loss, expiry, release, pause, errors or teardown, native mouth targets return to the current PICO pipeline output. Extra SDK targets are cleared only if this adapter actually wrote them previously; untouched extensions retain their SDK values. No face values are changed when `ownsFace=false`. These mappings use existing official SDK5/6 channels without changing the host or its enums.
+Each whole-mouth write clears unknown targets in the owned 50-field schema. Mask loss, expiry and release therefore cannot retain a previous model field or stale native pipeline value. Hybrid can still use current fresh native observations; ModelOnly cannot. No face values are changed when `ownsFace=false`. These mappings use existing official SDK5/6 channels without changing the host or its enums.
 
 ### Synthetic interoperability tests
 
 `tools/test-mouth-wire.py --dll <TongueTests.dll> --pc-wire <pc-tongue/wire.py> --output <new-directory>` imports the actual `face_result_packet` encoder. It checks all 50 individual mask bits, aggregate/independent precedence, unknown fields, ordering, release, expiry, face ownership and UDP socket release. `--batch-only` skips UDP.
 
-`TongueTests.dll --mfr-batch <cases.jsonl> <result.json>` provides a deterministic SDK-write assertion API. Each JSONL row may contain `packet` (base64 datagram), `advanceMs` (local monotonic time increment), `ownsFace`, expected `accepted`/`reason`, and an `expected` dictionary of official SDK expression names to values. A row without a packet tests expiry. The synthetic PICO fallback has JawOpen 0.23, TongueOut 0.17, other native mouth controls 0; untouched SDK fields start at 0.731. The result contains the schema, ordered channels and each step's SDK snapshot. Tests do not load models or a host UI.
+`TongueTests.dll --mfr-batch <cases.jsonl> <result.json>` provides a deterministic SDK-write assertion API. Each JSONL row may contain `packet` (base64 datagram), `advanceMs` (local monotonic time increment), `ownsFace`, expected `accepted`/`reason`, and an `expected` dictionary of official SDK expression names to values. A row without a packet tests expiry. This result-only fixture provides no fresh native observation, so missing mouth values clear; unrelated SDK fields start at 0.731. The result contains the schema, ordered channels and each step's SDK snapshot. Tests do not load models or a host UI.
 
 ## Verification status
 

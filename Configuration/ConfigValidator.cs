@@ -18,6 +18,8 @@ public static class ConfigValidator
         if (!Enum.IsDefined(config.Source)) { log($"Source={config.Source} 未知；使用 Auto。"); config.Source = SourceSelection.Auto; }
         config.Bridge ??= new(); config.Streaming ??= new(); config.Stale ??= new(); config.EyeGain ??= new(); config.PostProcessing ??= new();
         config.Tongue ??= new();
+        if (!Enum.IsDefined(config.Tongue.MouthMode))
+        { log($"Tongue.MouthMode={config.Tongue.MouthMode} 未知；使用 Hybrid。"); config.Tongue.MouthMode = MouthMode.Hybrid; }
         config.Tongue.Port = Integer(config.Tongue.Port, 1, 65535, 45682, "Tongue.Port", log);
         config.Bridge.IP = Address(config.Bridge.IP, null, "Bridge.IP", log);
         config.Streaming.IP = Address(config.Streaming.IP, null, "Streaming.IP", log);

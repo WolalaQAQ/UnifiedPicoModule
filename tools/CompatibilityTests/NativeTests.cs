@@ -200,10 +200,11 @@ internal static partial class Program
                 else { mouthPacket.UpdateGlobalExpressionState(); eyePacket.UpdateGlobalEyeState(); }
                 Bytes(session.Emit(), Expected((0, 0.4f), (24, 0.6f), (25, 0.8f), (36, 0.7f), (86, 0.5f)), "Sentinel-preserving mixed IPC");
             }
-            // A faulted source leaves the configured default held output while the other
-            // source continues; Teardown neutralizes only the mouth-owned channels.
+            // Hybrid requires a fresh native observation; a held pipeline value is not
+            // eligible after interruption. The independently owned eye source continues.
             mouthSource.Snapshot = mouthSource.Snapshot with { State = ConnectionState.Faulted, Face = null };
-            mouth.Update(); Near(Weight(UnifiedExpressions.JawOpen), 0.7f, "Mouth interruption holds last value");
+            mouth.Update(); Near(Weight(UnifiedExpressions.JawOpen), 0, "Mouth interruption clears an unavailable hybrid scalar");
+            Near(Weight(UnifiedExpressions.TongueOut), 0, "Mouth interruption cannot reuse held tongue output");
             mouth.Teardown(); eyes.Update();
             Bytes(session.Emit(), Expected((0, 0.4f), (24, 0.6f), (25, 0.8f)), "Mouth stop preserves eye output");
             Console.WriteLine("MIXED: synthetic independent mouth owner; real Cymple module is not exercised.");

@@ -76,19 +76,19 @@ TJR与MFR使用同一接收器、同一份顺序记录。同一会话内seq必�
 
 ### SDK映射
 
-模块唯一的`Write`边界先写本帧PICO结果，再由有效MFR字段覆盖对应嘴部目标。前33项复用`NeutralFaceMapper`映射，其余按同名SDK字段写入；`LipFunnelUpper/Lower`分别复制给该唇左右两个Funnel字段。
+模块唯一的`Write`边界按`Tongue.MouthMode`合并：Hybrid逐项优先采用存在、有效且新鲜的原厂标量（包括0），不足处用模型有效新鲜值；ModelOnly只用MFR值。前33项复用`NeutralFaceMapper`映射，其余按同名SDK字段写入；`LipFunnelUpper/Lower`分别复制给该唇左右两个Funnel字段。
 
-独立左右CheekPuff、上下唇横移和上下唇Funnel只在自身有效时覆盖聚合量的对应目标。例如只有`MouthUpperLeft`有效，不会清掉未知的`MouthLowerLeft`：下唇保留有效聚合`MouthLeft`，聚合也未知时使用本帧PICO下唇结果。
+独立左右CheekPuff、上下唇横移和上下唇Funnel只在自身有效时覆盖聚合量的对应目标。只有`MouthUpperLeft`有效时，下唇使用有效聚合量、混合模式下新鲜的原厂代理值，或在两者均缺失时清零。原厂扇出复制不算独立观测。
 
 MFR的全部值直接作为`[0,1]`控制量，不使用旧TJR舌头存在阈值、方向缩放、额外乘TongueOut、legacy 0.99上限或PICO后处理规则。TongueOut为0或未知，也不会取消独立有效的方向／Roll。
 
-有效位消失、过期、释放、暂停、异常或teardown时，原有嘴部目标回到本帧PICO管线输出；额外SDK字段仅清除本适配器真正写入过的位，未拥有扩展保留原SDK值。`ownsFace=false`时不改任何嘴部值。这些映射使用官方SDK5／6已有通道，无需修改宿主或枚举。
+每次整嘴写入均清除本模块拥有的50字段schema中未知的目标，因此掩码消失、过期或释放不会保留前帧模型值或原厂管线过期值。Hybrid仍可用当前新鲜原厂观测，ModelOnly不回退原厂。`ownsFace=false`时不改任何嘴部值。这些映射使用官方SDK5／6已有通道，无需修改宿主或枚举。
 
 ### 合成互通测试
 
 `tools/test-mouth-wire.py --dll <TongueTests.dll> --pc-wire <pc-tongue/wire.py> --output <新目录>`直接导入实际`face_result_packet`编码器，验证全部50个单独有效位、聚合与独立量优先级、未知字段、顺序、释放、过期、来源所有权和UDP端口释放。加`--batch-only`可跳过UDP。
 
-`TongueTests.dll --mfr-batch <cases.jsonl> <result.json>`提供确定性SDK写入断言。每行JSON可含`packet`（base64数据报）、`advanceMs`（本机单调时间推进毫秒）、`ownsFace`、预期`accepted`／`reason`及`expected`（官方SDK字段名→值）。不带packet的行用于验证过期。合成PICO回退值为JawOpen 0.23、TongueOut 0.17，其余原有嘴项为0；未写过的SDK字段初始为0.731。结果包含schema、字段顺序和每一步SDK快照；不加载模型或宿主UI。
+`TongueTests.dll --mfr-batch <cases.jsonl> <result.json>`提供确定性SDK写入断言。每行JSON可含`packet`（base64数据报）、`advanceMs`（本机单调时间推进毫秒）、`ownsFace`、预期`accepted`／`reason`及`expected`（官方SDK字段名→值）。不带packet的行用于验证过期。这个纯结果fixture不提供新鲜原厂观测，嘴部缺项清除；无关SDK字段初始为0.731。结果包含schema、字段顺序和每一步SDK快照；不加载模型或宿主UI。
 
 ## 验证状态
 

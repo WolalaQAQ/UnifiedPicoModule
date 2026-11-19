@@ -14,7 +14,7 @@ Use `feat/tongue-pc` in both this repository and [PicoET-Enhance](https://github
 The configuration section defaults to:
 
 ```json
-"Tongue": { "Enabled": true, "Port": 45682 }
+"Tongue": { "Enabled": true, "Port": 45682, "MouthMode": "Hybrid" }
 ```
 
 `Port` accepts 1–65535; invalid values fall back to 45682. Omitted settings use defaults without rewriting an existing file. `Enabled=false` disables the receiver. The bind address is always IPv4 loopback. Bind failure is logged and leaves normal PICO tracking running. Configuration changes take effect on module initialization.
@@ -23,14 +23,16 @@ Only `ownsFace && Tongue.Enabled` opens the socket. With Cymple mouth + PICO eye
 
 ## MFR1 whole-mouth output
 
-End-to-end models use 256-byte MFR1 with the `pico-mouth50-v1` schema on the same loopback UDP port. It carries 50 named continuous controls and a validity mask. The original 44 fields retain their order; four independent upper/lower lip horizontal controls and two upper/lower Funnel controls are appended. Validity comes from the model manifest's trained channels, not simply from having 50 numeric outputs.
+End-to-end models use 256-byte MFR1 with the `pico-mouth50-v1` schema on the same loopback UDP port. It carries 50 named continuous controls and a validity mask. The original 44 fields retain their order; four independent upper/lower lip horizontal controls and two upper/lower Funnel controls are appended. The manifest's explicit `valid_mask` may enable only independently `validated_channels` within `trained_channels`; a zero-mask candidate stays disabled.
 
-| PC result | Module output |
+| `Tongue.MouthMode` | Whole-mouth output |
 |---|---|
-| Fresh, supported field | Override the corresponding PICO mouth output; independent lip/cheek controls take precedence over legacy aggregate fan-out |
-| Unsupported/unknown field | A zero payload is not a neutral measurement; existing stock channels continue to use the current PICO value |
-| Invalid, stopped or expired | Release model overrides, restore current PICO values and release new extensions previously written by this model |
-| Face owned by another module | Neither write nor clear that module's mouth/tongue fields |
+| `Hybrid` (default) | Each present, valid, fresh native scalar takes priority, including zero. Use a fresh, valid model value only where that scalar is unavailable; clear fields unavailable from both |
+| `ModelOnly` | Use only fresh model fields. Unknown fields, release, disconnection and expiry clear the owned mouth schema, even when native values exist |
+
+Set this one field in the module JSON and reinitialize the module/restart VRCFT to apply it. Old configurations that omit it use `Hybrid` without being rewritten. ModelOnly also clears the mouth before its first model result or when the receiver cannot bind; it never falls back to native output. The PC service sends model results only and has no second mode selector.
+
+Native support is checked against the actual fresh `RawFace` observation, its face validity, field presence and finite `[0,1]` value—not held pipeline values or synthetic post-processing output. Aggregate CheekPuff, MouthLeft/Right and MouthFunnel fan-outs do not supply independently measured left/right cheeks, upper/lower lip movement or upper/lower Funnel: valid independent model fields may replace those proxies in Hybrid. Eyes retain their existing source. When another module such as Cymple owns the mouth, neither mode writes or clears its fields.
 
 MFR1 does not apply legacy TJR tongue-presence thresholds, direction remapping or an `Out * direction` gate. Zero and small nonzero predictions remain model controls. Sequence, sensor time, session retirement and source age enforce freshness; duplicates do not renew expiry. See [Protocol](docs/protocol.md) for the exact layout.
 

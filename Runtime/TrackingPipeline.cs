@@ -162,7 +162,10 @@ public sealed class TrackingPipeline
                     ExpressionFrame.IsLeftEye(channel) ? leftExpressionArrival : rightExpressionArrival, now, config.Stale.FaceMs))
                     output[channel] = 0;
         output.Clamp(config.LegacyExpressionCeiling ? 0.99f : 1);
-        return new(output, left, right);
+        var mouth = snapshot.GroupedExpressions ? snapshot.Mouth : snapshot.Face;
+        return new(output, left, right, mouth is not null && !config.DisableFaceTracking &&
+            snapshot.State is not (ConnectionState.Faulted or ConnectionState.Stopped) &&
+            MonotonicClock.Fresh(mouth.Arrival, now, config.Stale.FaceMs) ? mouth : null);
     }
     private void KeepIndependentExpressions(RawFace raw, ExpressionFrame output)
     {

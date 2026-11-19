@@ -137,6 +137,8 @@ With a complete `HeaderProfile`, a 29765 datagram must meet the length and `trac
 
 ## Tongue
 
+`MouthMode` accepts `"Hybrid"` (default, native-valid-first with model gap filling) or `"ModelOnly"` (model-only mouth, clearing unknown/expired fields). Existing JSON that omits it uses Hybrid without rewriting the file. This is the only whole-mouth mode selector; eyes and VRCFT mouth ownership remain independent. See [whole-mouth modes](../TONGUE.md#mfr1-whole-mouth-output).
+
 `Enabled` defaults to `true`. `Port` defaults to `45682`, accepts 1–65535, and falls back to 45682 for invalid values. The address is always `127.0.0.1`; the receiver opens only when this module owns face output. Missing settings use these defaults without rewriting an existing file. PC tongue results always expire within 350 ms, independently of `Stale.NeutralizeOnTimeout`. See [PC tongue setup and protocol](../TONGUE.md).
 
 ## Eye resolution and gain

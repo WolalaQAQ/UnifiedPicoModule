@@ -10,7 +10,6 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="../../Core/Contracts.cs" Link="Core/Contracts.cs" />
-    <Compile Include="../../Protocol/MfrPacket.cs" Link="Protocol/MfrPacket.cs" />
     <Compile Include="../../Configuration/*.cs" Link="Configuration/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

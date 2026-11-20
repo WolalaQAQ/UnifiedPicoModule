@@ -2,29 +2,29 @@
 
 English | [简体中文](CHANGELOG_zh.md)
 
-## [Unreleased] - 2026-11-19
+## [Unreleased] - 2026-11-20
 
 ### Features
-- Add `Tongue.HybridChannels`: optional native-channel whitelist under `Hybrid` (`null` = all 33 native mouth channels; array = only listed channels prefer fresh native scalars while the rest use model-only behavior).
-- Add `Tongue.MouthMode`: default Hybrid prefers each valid fresh native scalar (zero included) and fills gaps from valid model fields; ModelOnly uses no native fallback and clears unknown/expired mouth fields.
+- Simplify the VRCFT module to a pure output sink for `MFR1` whole-mouth packets (`PicoET` PC Studio now owns `Hybrid` / `ModelOnly` channel routing and merges `PSL1` native scalars with model predictions before sending `MFR1`).
+- Automatically yield `BridgeSplit` face demand (`PXR_SUB` mask 3 → 1 when eyes are active) without resetting live eye state whenever an `MFR1` stream takes over the mouth, and seamlessly restore direct Bridge face tracking (`mask=3`) on release or expiry.
 - Accept PC-local TJR1 tongue results on loopback UDP45682, configurable through `Tongue.Enabled` / `Tongue.Port`.
 - Add production receiver, SDK ownership, lifecycle and actual Python encoder interoperability tests.
 - Accept optional 80-byte TJR2 results with Up/Down/Roll for the PC app's MouthLink models, retaining the exact TJR1 format and common freshness rules.
-- Accept 256-byte MFR1 end-to-end whole-mouth results with 50 ordered fields, per-field validity and source identity; override supported PICO mouth and independent lip/cheek controls.
+- Accept 256-byte MFR1 end-to-end whole-mouth results with 50 ordered fields, per-field validity and source identity.
 
 ### Fixes
 - Carry the validated Steam VRCFT 6 pupil write-boundary fix into this development branch: use the unavailable sentinel when there is no measurement, while retaining real millimeters and the VRCFT 5 configured estimate.
 
 ### Design Rationale
+- Keep channel-routing decisions and live UI toggles in `PicoET` PC Studio instead of static module JSON so users can switch native/model routing live without restarting VRCFT, while direct `Bridge → UnifiedPicoModule` users continue unmodified with zero configuration changes.
 - Move video, inference and personalization to the paired PicoET PC app. Keep mouth ownership in VRCFT and SDK writes in the module's existing Write boundary.
-- Make fresh absent authoritative; invalid/stop/expiry restore the current native Out and clear Left/Right. Source age, sensor time and sequence prevent old images from renewing output.
-- Keep regression inference outside VRCFT. Extended channels are written only after a TJR2 result, then cleared on expiry, stop and return to TJR1 so poses cannot latch.
-- MFR1 carries named continuous controls directly, without legacy TJR thresholds or direction gating. Source availability follows actual per-field observations, not held values or aggregate fan-out proxies; eyes and foreign mouth ownership remain independent.
+- Make fresh absent authoritative; invalid/stop/expiry for TJR restore the current native Out and clear Left/Right; MFR release/expiry clears extended targets and returns native mouth slots cleanly to direct Bridge tracking. Source age, sensor time and sequence prevent old images from renewing output.
+- MFR1 carries named continuous controls directly, without legacy TJR thresholds or direction gating; eyes and foreign mouth ownership remain completely decoupled.
 
 ### Notes & Caveats
+- Removing `Tongue.MouthMode` and `Tongue.HybridChannels` from `ModuleConfig` keeps old JSON files loadable (unknown keys are logged and ignored).
 - Eye-only mixed tracking opens no tongue socket and writes no foreign mouth fields. TJR1-only instances leave Up/Down/Roll unchanged; no UDP19031 subscription or native/model maximum merge is included.
 - Development source integration; worn calibration, personal-model accuracy and Avatar behavior remain live-test work. SDK dependency and published version metadata remain unchanged.
-- MFR1 and TJR share the receiver port. Whole-mouth inference and teacher/student training stay outside the module; when Cymple owns the mouth, neither write nor clear its fields.
 
 ## [0.4.1] - 2026-11-05
 

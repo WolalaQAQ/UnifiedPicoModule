@@ -2,39 +2,28 @@
 
 [English](TONGUE.md) | 简体中文
 
-本仓库与[PicoET-Enhance](https://github.com/WolalaQAQ/PicoET-Enhance/tree/feat/tongue-pc)配套使用`feat/tongue-pc`。[发送端说明](https://github.com/WolalaQAQ/PicoET-Enhance/blob/feat/tongue-pc/TONGUE_zh.md)包含相机源、PC App、录制、回归模型与本地教师蒸馏。头显负责取图，PC负责配置和推理，本模块只接数值结果并在VRCFT原Write边界合并，不运行模型或启动相机。
+本仓库与[PicoET-Enhance](https://github.com/WolalaQAQ/PicoET-Enhance/tree/feat/tongue-pc)配套使用`feat/tongue-pc`。[发送端说明](https://github.com/WolalaQAQ/PicoET-Enhance/blob/feat/tongue-pc/TONGUE_zh.md)包含相机源、PC Studio、`Hybrid`／`ModelOnly` 逐通道分流、回归模型与本地教师蒸馏。头显负责取图与原厂数值，PC Studio 负责配置、推理与通道合流；本模块在 VRCFT 原 Write 边界直接写入收到的 `MFR1` 50 路结果，并在增强面捕活跃时自动暂停向 Bridge 订阅原生面部（保持眼动直连不断流）。
 
 ## 构建与使用
 
 1. 按[开发说明](docs/development_zh.md)准备固定版本官方VRCFT SDK并构建，依赖仍为VRCFT 5.4.5／.NET 10。
 2. 关闭VRCFT，按[安装说明](README_zh.md#安装)安装构建的模块，保留已有配置，不同时加载两个副本。
-3. 测试PICO整嘴回归时，由VRCFT将面部输出分配给PICO模块。PC App不选择或覆盖嘴部来源。
-4. 在App中启用本机UDP输出到`127.0.0.1:45682`，再开始实时输入；端口与模块的`Tongue.Port`一致。
+3. 测试PICO整嘴回归时，由VRCFT将面部输出分配给PICO模块。当 PC Studio 开始发送 `MFR1` 时，模块自动通过 `PXR_SUB` 将 Bridge 订阅收敛为仅眼动（`mask=1`，眼动有效与状态不重置）；停止发送或超时后自动恢复直连 Bridge 面捕（`mask=3`）。
+4. 在 PC Studio 中开启本机 UDP 输出到 `127.0.0.1:45682`，再开始实时输入；端口与模块的 `Tongue.Port` 一致。
 
 新增配置默认值：
 
 ```json
-"Tongue": { "Enabled": true, "Port": 45682, "MouthMode": "Hybrid", "HybridChannels": null }
+"Tongue": { "Enabled": true, "Port": 45682 }
 ```
 
-`Port`范围1–65535，非法值回退45682。省略时采用默认值，不改写已有文件；`Enabled=false`关闭接收器。地址固定为IPv4环回。绑定失败会记录日志，正常PICO追踪继续。配置只在模块初始化时读取。
+`Port`范围1–65535，非法值回退45682。省略时采用默认值，不改写已有文件；`Enabled=false`关闭接收器。地址固定为IPv4环回。绑定失败会记录日志，正常PICO追踪继续。配置只在模块初始化时读取。若已有配置文件中遗留旧键 `Tongue.MouthMode` 或 `Tongue.HybridChannels`，读取时按未知键记录日志并忽略，不报错也不改写原文件；分流方式请在 PC Studio 设置页实时调整。
 
 只有`ownsFace && Tongue.Enabled`才打开socket。Cymple嘴＋PICO眼混搭时，PICO模块不打开舌头端口、不写外部嘴部或舌头字段；宿主中保留原有眼嘴分工。
 
 ## MFR1整嘴输出
 
-端到端模型使用256字节MFR1，schema为`pico-mouth50-v1`，通过同一个环回UDP端口发送50项命名连续控制量及有效位掩码。旧44字段原序保留，追加上下唇各自左右横移四项和上下Funnel两项。manifest显式`valid_mask`只能启用`trained_channels`中经过独立验证的`validated_channels`，零掩码候选保持禁用。
-
-| `Tongue.MouthMode` | 整嘴输出 |
-|---|---|
-| `Hybrid`（默认，混合） | 每项优先使用实际支持、有效且新鲜的头显标量，0也是有效值；不足处才用模型有效新鲜值，两者都缺失则清除 |
-| `ModelOnly`（完整模型） | 嘴部只使用模型；未知字段、释放、断流和过期均清除本模块拥有的嘴部字段，即使头显仍有数值 |
-
-在模块JSON中修改这一个字段，重新初始化模块／重启VRCFT后生效。旧配置缺省为`Hybrid`，原文件不改写。ModelOnly在首个模型结果前或接收器绑定失败时同样清除嘴部，不回退头显。PC服务只发送模型结果，没有第二套模式选择。
-
-当`MouthMode`为`Hybrid`时，可通过可选的`Tongue.HybridChannels`按通道指定哪些原生嘴部通道（`CheekPuff`到`TongueOut`共33项）走原生优先：默认为`null`（全部33项都走Hybrid）；设为非空列表（例如`["JawOpen", "MouthFunnel", "MouthPucker"]`）或空列表`[]`时，只有列表内的通道优先采用新鲜原生标量，其余所有嘴部通道均只使用模型有效值并在过期时清零、不回退原生。列表包含扩展通道（33–49）或重复项时记入日志并回退为`null`。
-
-原厂支持依据当前新鲜`RawFace`观测的面部有效位、字段存在性和有限`[0,1]`值，不依据管线保留值或后处理合成输出。CheekPuff、MouthLeft/Right、MouthFunnel的扇出复制不提供独立左右鼓腮、上下唇横移或上下Funnel观测，混合模式仍允许模型独立字段覆盖这些代理值。眼源保持原路径；Cymple等其他模块拥有嘴部时，两模式都不写也不清其字段。
+端到端模型使用256字节MFR1，schema为`pico-mouth50-v1`，通过同一个环回UDP端口发送50项命名连续控制量及有效位掩码。旧44字段原序保留，追加上下唇各自左右横移四项和上下Funnel两项。PC Studio 已按当前 `Hybrid`／`ModelOnly` 配置完成原厂 `final33` 与模型输出的逐通道合流；本模块在 `MFR1` 活跃期间作为纯接收端直接清空本模块拥有的 50 项嘴部 schema 并写入 `MFR1` 有效字段（未置位字段清零），释放或过期后恢复由 Bridge 直连管线接管并清零扩展通道。眼源保持原路径；Cymple 等其他模块拥有嘴部时，不写也不清其字段。
 
 MFR1不使用旧TJR的舌头出现阈值、方向缩放或`Out×direction`门控；0与小幅非零都作为模型控制值传递。序号、sensor时间、会话退役和来源年龄共同限制新鲜度，重复包不续期。解析与精确布局见[协议说明](docs/protocol_zh.md)。
 

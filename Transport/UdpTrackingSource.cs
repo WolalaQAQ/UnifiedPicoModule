@@ -125,6 +125,25 @@ public abstract class UdpTrackingSource : ITrackingSource
         Log($"{Current.Source}: generation={Current.Generation}, protocol={protocol?.ToString() ?? "unlocked"}, {detail}");
     }
 
+    protected void ClearCachedMouth(string detail)
+    {
+        mouthTimestamp = null;
+        if (Current.GroupedExpressions)
+            Publish(Current with { Mouth = null, Detail = detail });
+        else if (Current.Face is { } raw)
+            Publish(Current with { Face = raw.WithValidity(true, false), Detail = detail });
+    }
+
+    protected void ReacknowledgePreservingEyes(int requested, int effective, ulong epoch)
+    {
+        eyeTimestamp = faceTimestamp = rightFaceTimestamp = mouthTimestamp = null;
+        Publish(Current with { Protocol = InputProtocol.BridgeSplit,
+            Face = !Current.GroupedExpressions && Current.Face is { } raw ? raw.WithValidity(true, false) : Current.Face,
+            Mouth = null,
+            Detail = $"Subscription updated preserving eyes: requested={requested} effective={effective} epoch={epoch:x16}" });
+        Log($"{Current.Source}: subscription updated preserving eyes: requested={requested} effective={effective} epoch={epoch:x16}");
+    }
+
     protected bool Commit(DecodedPacket packet)
     {
         if (packet.Face is { } morphology)

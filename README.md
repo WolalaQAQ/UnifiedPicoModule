@@ -71,13 +71,11 @@ If the file does not exist on first start, the module generates a default config
 | `EyeGain` | All `1` | Gain for the gaze X and Y axes and eye openness, set separately for each eye |
 | `AllowFallback` | `false` | Whether to switch to the other source when the current one becomes unavailable |
 | `Streaming.LocalOnly` | `true` | Accept streaming data only from the local machine. PICO Connect runs locally, so this normally does not need to be changed |
-| `Tongue.Enabled` / `Tongue.Port` | `true` / `45682` | Receive whole-mouth regression or compatible tongue results on IPv4 loopback only when this module owns face output |
-| `Tongue.MouthMode` | `Hybrid` | Prefer valid fresh native mouth scalars and fill gaps from the model; `ModelOnly` uses the model exclusively and clears unknown/expired fields |
-| `Tongue.HybridChannels` | `null` | Under `Hybrid`, `null` uses native-first for all 33 native mouth channels; a channel name array restricts native-first Hybrid to those channels and keeps the rest model-only |
+| `Tongue.Enabled` / `Tongue.Port` | `true` / `45682` | Receive whole-mouth regression (`MFR1`) or compatible tongue results (`TJR1`/`TJR2`) on IPv4 loopback when this module owns face output |
 
 For the complete list of fields, valid ranges and defaults, see the [configuration reference](docs/configuration.md).
 
-The `feat/tongue-pc` branch receives end-to-end whole-mouth results from the paired PC app: the headset captures images, the PC handles configuration/inference, and the VRCFT module merges supported fields using their validity mask. See [PC mouth setup and protocol](TONGUE.md) for building, ownership, expiry and offline checks. TJR1/TJR2 numeric compatibility remains; this module runs no models and does not use the older headset UDP19031 protocol.
+The `feat/tongue-pc` branch receives end-to-end whole-mouth results from PC Studio: PC Studio handles camera inference and `Hybrid` / `ModelOnly` per-channel routing, while this module writes the received `MFR1` vector directly and automatically yields Bridge face demand (`PXR_SUB`) while keeping eye tracking uninterrupted. When PC Studio stops, tracking returns directly to Bridge. See [PC mouth setup and protocol](TONGUE.md) for building, ownership, expiry and offline checks. TJR1/TJR2 numeric compatibility remains; this module runs no models and does not use the older headset UDP19031 protocol.
 
 Bridge also sends Blink data when only eye tracking is enabled; face output can remain disabled.
 

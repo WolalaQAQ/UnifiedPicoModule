@@ -14,7 +14,8 @@ public sealed class BridgeUdpSource : UdpTrackingSource
     private readonly string listenAddress;
     private readonly string? configuredIP;
     private readonly InputProtocol? configuredProtocol;
-    private readonly int reconnectMs, controlTimeoutMs;
+    private readonly int reconnectMs, controlTimeoutMs, listenPort, peerPort;
+    private readonly bool eyeConfigured, faceConfigured;
     private readonly BridgeSplitDecoder split = new();
     private readonly DaemonLegacyDecoder legacy = new();
     private readonly List<UnicastIPAddressInformation> discoveryInterfaces = [];
@@ -22,14 +23,17 @@ public sealed class BridgeUdpSource : UdpTrackingSource
     private IPAddress? requiredIP;
     private IPEndPoint? peer;
     private double nextDiscovery, lastDiscovery, lastActivity, lastData, lastMode;
-    private readonly int requestedMask;
+    private int requestedMask;
     private string subscriptionId = "";
-    private bool splitPeer, subscribed;
+    private bool splitPeer, subscribed, renegotiating, awaitingDiscoveryReply;
     private ulong streamEpoch;
     private int effectiveMask;
     private double nextSubscription;
 
-    public BridgeUdpSource(BridgeSettings settings, Action<string> log, bool eyeEnabled = true, bool faceEnabled = true) : base(SourceKind.Bridge, log)
+    public int BoundPort { get { lock (Gate) return socket?.LocalEndPoint is IPEndPoint ep ? ep.Port : listenPort; } }
+
+    public BridgeUdpSource(BridgeSettings settings, Action<string> log, bool eyeEnabled = true, bool faceEnabled = true,
+        int listenPort = Port, int peerPort = Port) : base(SourceKind.Bridge, log)
     {
         ArgumentNullException.ThrowIfNull(settings);
         listenAddress = settings.ListenAddress;
@@ -37,7 +41,30 @@ public sealed class BridgeUdpSource : UdpTrackingSource
         configuredProtocol = settings.Protocol;
         reconnectMs = Math.Clamp(settings.ReconnectMs, 100, 60000);
         controlTimeoutMs = Math.Clamp(settings.ControlTimeoutMs, 1000, 120000);
+        this.listenPort = listenPort;
+        this.peerPort = peerPort;
+        eyeConfigured = eyeEnabled;
+        faceConfigured = faceEnabled;
         requestedMask = (eyeEnabled ? 1 : 0) | (faceEnabled ? 2 : 0);
+    }
+
+    public void SetExternalMouthActive(bool active)
+    {
+        lock (Gate)
+        {
+            int desiredMask = (eyeConfigured ? 1 : 0) | (faceConfigured && !active ? 2 : 0);
+            if (desiredMask == requestedMask) return;
+            requestedMask = desiredMask;
+            if (peer is null || !splitPeer || socket is null) return;
+            double now = MonotonicClock.Now;
+            subscriptionId = Guid.NewGuid().ToString("N")[..16];
+            renegotiating = (subscribed || renegotiating) && (desiredMask & 1) != 0 && (Current.Eye is not null || Current.Face is not null);
+            awaitingDiscoveryReply = true;
+            subscribed = false; streamEpoch = 0; effectiveMask = 0;
+            ClearCachedMouth($"Bridge face demand updated: requestedMask={requestedMask}");
+            if (Send(socket, BridgeControl.Discover, peer)) lastDiscovery = now;
+            nextSubscription = now + 1;
+        }
     }
 
     protected override void OpenSockets()
@@ -45,7 +72,7 @@ public sealed class BridgeUdpSource : UdpTrackingSource
         if (configuredProtocol is not (null or InputProtocol.BridgeSplit or InputProtocol.DaemonLegacy536))
             throw new ArgumentException("Bridge.Protocol must be BridgeSplit or DaemonLegacy536");
         requiredIP = ParsePeer(configuredIP);
-        socket = Bind(listenAddress, Port);
+        socket = Bind(listenAddress, listenPort);
         socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 1);
     }
 
@@ -66,7 +93,15 @@ public sealed class BridgeUdpSource : UdpTrackingSource
             }
             else
             {
-                if (splitPeer && !subscribed && now >= nextSubscription) SendSubscription(now);
+                if (splitPeer && !subscribed && now >= nextSubscription)
+                {
+                    if (awaitingDiscoveryReply)
+                    {
+                        if (Send(socket!, BridgeControl.Discover, peer)) lastDiscovery = now;
+                        nextSubscription = now + 1;
+                    }
+                    else SendSubscription(now);
+                }
                 // Current Bridge announces mode every 10s. After two missed advertisements,
                 // downgrade capability even if MARCO/data continue; never infer mode from vectors.
                 var modeTimeout = Math.Min(20000, controlTimeoutMs);
@@ -83,7 +118,7 @@ public sealed class BridgeUdpSource : UdpTrackingSource
         RefreshDiscoveryInterfaces();
         var sent = false;
         if (requiredIP is not null)
-            sent = Send(socket!, BridgeControl.Discover, new(requiredIP, Port));
+            sent = Send(socket!, BridgeControl.Discover, new(requiredIP, peerPort));
         else
         {
             foreach (var network in discoveryInterfaces)
@@ -92,7 +127,7 @@ public sealed class BridgeUdpSource : UdpTrackingSource
                 {
                     socket!.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface,
                         network.Address.GetAddressBytes());
-                    sent |= Send(socket, BridgeControl.Discover, new(Multicast, Port));
+                    sent |= Send(socket, BridgeControl.Discover, new(Multicast, peerPort));
                 }
                 catch (SocketException ex) { Warn("interface", $"Discovery interface unavailable: {ex.SocketErrorCode}"); }
             }
@@ -151,10 +186,11 @@ public sealed class BridgeUdpSource : UdpTrackingSource
             }
             if (!splitPeer) Log($"Bridge: BridgeSplit peer; requesting mask={requestedMask} (host ownership AND configuration)");
             splitPeer = true;
+            awaitingDiscoveryReply = false;
             // Refresh the idempotent request on every announcement, even after the first
             // acknowledgement, recovering a lost request/ACK. A restarted Bridge forgets its peer
             // and announces nothing until rediscovery, so restart recovery relies on the control timeout.
-            if (now >= nextSubscription) SendSubscription(now);
+            if (!subscribed || now >= nextSubscription) SendSubscription(now);
             return;
         }
         if (BridgeControl.IsSubscriptionLine(bytes))
@@ -182,10 +218,17 @@ public sealed class BridgeUdpSource : UdpTrackingSource
             if (!subscribed || epoch != streamEpoch || mask != effectiveMask)
             {
                 if (subscribed && epoch == streamEpoch) { Drop("subscription", "Channel mask changed without a new epoch"); return; }
+                bool keepEyes = renegotiating && (mask & 1) != 0;
+                renegotiating = false; awaitingDiscoveryReply = false;
                 subscribed = true; streamEpoch = epoch; effectiveMask = mask;
-                lastData = 0;
-                Reset(InputProtocol.BridgeSplit, Current.Capabilities, ConnectionState.MissingFrames,
-                    $"Subscription acknowledged: requested={requestedMask} effective={mask} epoch={epoch:x16}; cached channels cleared");
+                if (keepEyes)
+                    ReacknowledgePreservingEyes(requestedMask, mask, epoch);
+                else
+                {
+                    lastData = 0;
+                    Reset(InputProtocol.BridgeSplit, Current.Capabilities, ConnectionState.MissingFrames,
+                        $"Subscription acknowledged: requested={requestedMask} effective={mask} epoch={epoch:x16}; cached channels cleared");
+                }
             }
             lastActivity = now; Publish(Current with { LastControl = now });
             return;
@@ -200,7 +243,7 @@ public sealed class BridgeUdpSource : UdpTrackingSource
             (!subscribed || packet.Epoch != streamEpoch || packet.ChannelMask != effectiveMask))
         {
             Drop("stream-epoch", "BridgeSplit packet does not match acknowledged epoch/channel mask; awaiting control acknowledgement");
-            if (splitPeer && now >= nextSubscription) SendSubscription(now);
+            if (splitPeer && !awaitingDiscoveryReply && now >= nextSubscription) SendSubscription(now);
             return;
         }
         if (configuredProtocol is not null && packet!.Protocol != configuredProtocol ||
@@ -239,7 +282,8 @@ public sealed class BridgeUdpSource : UdpTrackingSource
     private void ClearSubscription()
     {
         subscriptionId = Guid.NewGuid().ToString("N")[..16];
-        splitPeer = subscribed = false; streamEpoch = 0; effectiveMask = 0; nextSubscription = 0;
+        splitPeer = subscribed = renegotiating = awaitingDiscoveryReply = false;
+        streamEpoch = 0; effectiveMask = 0; nextSubscription = 0;
     }
 
     private void SendSubscription(double now)
@@ -251,7 +295,7 @@ public sealed class BridgeUdpSource : UdpTrackingSource
 
     private bool Allowed(IPEndPoint sender)
     {
-        if (sender.Port != Port || !IsUnicast(sender.Address)) return false;
+        if (sender.Port != peerPort || !IsUnicast(sender.Address)) return false;
         if (requiredIP is not null && !requiredIP.Equals(sender.Address)) return false;
         if (peer is not null) return peer.Equals(sender);
         if (requiredIP is not null) return true;

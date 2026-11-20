@@ -80,6 +80,11 @@ public sealed class SourceCoordinator : IDisposable
         raw is not null && MonotonicClock.Fresh(raw.Arrival, now, config.Stale.FaceMs) &&
         NeutralFaceMapper.HasConsumableExpressions(raw, eyeEnabled, faceEnabled);
     public IReadOnlyList<SourceSnapshot> Snapshots => sources.Select(s => s.Snapshot).ToArray();
+    public void SetExternalMouthActive(bool active)
+    {
+        foreach (var source in sources)
+            if (source is BridgeUdpSource bridge) bridge.SetExternalMouthActive(active);
+    }
     public void Dispose()
     {
         cancellation.Cancel();

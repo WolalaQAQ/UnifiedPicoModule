@@ -38,10 +38,6 @@ TrackingOutput Output(float outValue) {
     frame[ExpressionChannel.JawOpen] = .23f;
     return new(frame, new(), new());
 }
-TrackingOutput FreshOutput(float outValue, params PicoShape[] shapes) {
-    var present = new bool[52]; foreach (var shape in shapes) present[(int)shape] = true;
-    return Output(outValue) with { FreshMouth = new(new float[52], present, true, true, 1, 1) };
-}
 void Sentinel() {
     var data = new UnifiedTrackingData();
     foreach (ref var shape in data.Shapes.AsSpan()) shape.Weight = .731f;
@@ -159,149 +155,48 @@ Test("mfr_exact_layout_all_50_fields_and_roundtrip", () => {
     Check(Enum.GetNames<MouthChannel>().Length == 50 && (int)MouthChannel.MouthUpperLeft == 44);
     foreach (var c in Enum.GetValues<MouthChannel>()) Near(decoded[c], ((int)c + 1) / 50f);
 });
-Test("hybrid_prioritizes_present_native_zero_but_not_proxy_or_missing_channels", () => {
-    var module = Module(); Sentinel(); using var receiver = new TongueReceiver(); Set(module, "tongue", receiver);
-    SendMouth(receiver, MouthPacket());
-    var values = new float[52]; var present = new bool[52];
-    foreach (var shape in new[] { PicoShape.JawOpen, PicoShape.MouthFunnel, PicoShape.CheekPuff, PicoShape.MouthLeft })
-        present[(int)shape] = true;
-    var frame = new ExpressionFrame();
-    frame[ExpressionChannel.JawOpen] = 0; frame[ExpressionChannel.TongueOut] = .99f; // synthetic, not present
-    foreach (var c in new[] { ExpressionChannel.LipFunnelUpperLeft, ExpressionChannel.LipFunnelLowerLeft,
-        ExpressionChannel.CheekPuffLeft, ExpressionChannel.CheekPuffRight, ExpressionChannel.MouthUpperLeft,
-        ExpressionChannel.MouthLowerLeft }) frame[c] = .23f;
-    Call(module, "Write", new TrackingOutput(frame, new(), new(), new RawFace(values, present, false, true, 1, 1)));
-    Near(Weight(UnifiedExpressions.JawOpen), 0); // zero is a real native observation
-    Near(Weight(UnifiedExpressions.TongueOut), .66f); // no native scalar, model fills it
-    Near(Weight(UnifiedExpressions.CheekPuffLeft), .76f); // independent model beats native proxy fan-out
-    Near(Weight(UnifiedExpressions.MouthUpperLeft), .90f);
-    Near(Weight(UnifiedExpressions.LipFunnelLowerLeft), 1);
-    Near(Weight(UnifiedExpressions.EyeWideLeft), .731f);
-    receiver.Stop(); Call(module, "Write", new TrackingOutput(frame, new(), new(),
-        new RawFace(values, present, false, true, 1, 1)));
-    Near(Weight(UnifiedExpressions.CheekPuffLeft), .23f);
-    Near(Weight(UnifiedExpressions.TongueOut), 0);
-    module.Teardown();
-});
-Test("model_only_never_falls_back_and_real_mode_switches_clear_previous_fields", () => {
-    var module = Module(); Sentinel(); var config = new ModuleConfig();
-    Set(module, "config", config); double now = 1000;
+Test("mfr_active_overrides_all_mouth_targets_and_release_or_expiry_restores_pipeline_mouth", () => {
+    var module = Module(); Sentinel(); double now = 1000;
     using var receiver = new TongueReceiver(() => now); Set(module, "tongue", receiver);
-    var values = new float[52]; var present = Enumerable.Repeat(true, 52).ToArray();
-    var output = Output(.17f) with { FreshMouth = new(values, present, true, true, 1, 1) };
-    SendMouth(receiver, MouthPacket(mask: Mask(MouthChannel.TongueUp)));
-    Call(module, "Write", output); Near(Weight(UnifiedExpressions.JawOpen), .23f);
-    config.Tongue.MouthMode = MouthMode.ModelOnly;
-    Call(module, "Write", output); Near(Weight(UnifiedExpressions.JawOpen), 0);
-    Near(Weight(UnifiedExpressions.TongueOut), 0); Near(Weight(UnifiedExpressions.TongueUp), .72f);
-    now += 351; Call(module, "Write", output);
-    Near(Weight(UnifiedExpressions.TongueUp), 0); Near(Weight(UnifiedExpressions.JawOpen), 0);
-    config.Tongue.MouthMode = MouthMode.Hybrid;
-    Call(module, "Write", output); Near(Weight(UnifiedExpressions.JawOpen), .23f);
-    Call(module, "Write", output with { FreshMouth = null });
-    Near(Weight(UnifiedExpressions.JawOpen), 0); // held pipeline values are not fresh native support
-    Set(module, "ownsFace", false); Sentinel(); Call(module, "Write", output);
-    Check(UnifiedTracking.Data.Shapes.All(s => s.Weight == .731f)); module.Teardown();
-});
-Test("hybrid_channels_subset_routes_selected_to_native_and_others_to_model_only", () => {
-    var module = Module(); Sentinel(); var config = new ModuleConfig();
-    config.Tongue.MouthMode = MouthMode.Hybrid;
-    config.Tongue.HybridChannels = [MouthChannel.JawOpen, MouthChannel.MouthFunnel];
-    Set(module, "config", config); double now = 1000;
-    using var receiver = new TongueReceiver(() => now); Set(module, "tongue", receiver);
-    var values = new float[52]; var present = Enumerable.Repeat(true, 52).ToArray();
-    var frame = new ExpressionFrame();
-    frame[ExpressionChannel.JawOpen] = .23f;
-    frame[ExpressionChannel.LipFunnelUpperLeft] = .23f; frame[ExpressionChannel.LipFunnelUpperRight] = .23f;
-    frame[ExpressionChannel.LipFunnelLowerLeft] = .23f; frame[ExpressionChannel.LipFunnelLowerRight] = .23f;
-    frame[ExpressionChannel.MouthCornerPullLeft] = .80f; frame[ExpressionChannel.MouthCornerSlantLeft] = .80f;
-    frame[ExpressionChannel.TongueOut] = .90f;
-    var fresh = new TrackingOutput(frame, new(), new(), new RawFace(values, present, true, true, 1, 1));
-    SendMouth(receiver, MouthPacket(seq: 1, mask: MfrPacket.AllValid & ~Mask(MouthChannel.LipFunnelUpper, MouthChannel.LipFunnelLower)));
-    Call(module, "Write", fresh);
-    Near(Weight(UnifiedExpressions.JawOpen), .23f);
-    Near(Weight(UnifiedExpressions.LipFunnelUpperLeft), .23f);
-    Near(Weight(UnifiedExpressions.MouthCornerPullLeft), .50f);
-    Near(Weight(UnifiedExpressions.TongueOut), .66f);
-    SendMouth(receiver, MouthPacket(seq: 2, mask: MfrPacket.AllValid));
-    Call(module, "Write", fresh);
-    Near(Weight(UnifiedExpressions.JawOpen), .23f);
-    Near(Weight(UnifiedExpressions.LipFunnelLowerLeft), 1);
-    Near(Weight(UnifiedExpressions.MouthCornerPullLeft), .50f);
-    Near(Weight(UnifiedExpressions.TongueOut), .66f);
-    now += 351; Call(module, "Write", fresh);
-    Near(Weight(UnifiedExpressions.JawOpen), .23f);
-    Near(Weight(UnifiedExpressions.LipFunnelUpperLeft), .23f);
-    Near(Weight(UnifiedExpressions.MouthCornerPullLeft), 0);
-    Near(Weight(UnifiedExpressions.TongueOut), 0);
-    module.Teardown();
-});
-Test("hybrid_channels_config_roundtrip_null_empty_and_validation", () => {
-    string path = Path.Combine(Path.GetTempPath(), "pico-hybrid-config-" + Guid.NewGuid() + ".json");
-    try {
-        ConfigStore.SaveNew(path, new ModuleConfig());
-        var logs = new List<string>();
-        var read = ConfigStore.ReadOnly(path, logs.Add);
-        Check(read.Tongue.HybridChannels is null && logs.All(m => m.StartsWith("启用 ", StringComparison.Ordinal)), "SaveNew null roundtrip failed");
-
-        File.WriteAllText(path, "{\"ConfigVersion\":1,\"Tongue\":{\"HybridChannels\":[]}}");
-        logs.Clear(); read = ConfigStore.ReadOnly(path, logs.Add);
-        Check(read.Tongue.HybridChannels is { Count: 0 } && logs.All(m => m.StartsWith("启用 ", StringComparison.Ordinal)));
-
-        File.WriteAllText(path, "{\"ConfigVersion\":1,\"Tongue\":{\"HybridChannels\":[\"JawOpen\",\"MouthPucker\"]}}");
-        logs.Clear(); read = ConfigStore.ReadOnly(path, logs.Add);
-        Check(read.Tongue.HybridChannels is [MouthChannel.JawOpen, MouthChannel.MouthPucker]);
-
-        File.WriteAllText(path, "{\"ConfigVersion\":1,\"Tongue\":{\"HybridChannels\":[\"JawOpen\",\"JawOpen\"]}}");
-        logs.Clear(); read = ConfigStore.ReadOnly(path, logs.Add);
-        Check(read.Tongue.HybridChannels is null && logs.Any(m => m.Contains("重复")));
-
-        File.WriteAllText(path, "{\"ConfigVersion\":1,\"Tongue\":{\"HybridChannels\":[\"TongueLeft\"]}}");
-        logs.Clear(); read = ConfigStore.ReadOnly(path, logs.Add);
-        Check(read.Tongue.HybridChannels is null && logs.Any(m => m.Contains("不支持原生输出")));
-    } finally { if (File.Exists(path)) File.Delete(path); }
-});
-Test("model_only_is_model_only_before_first_packet_and_when_receiver_disabled", () => {
-    var module = Module(); Sentinel();
-    var config = new ModuleConfig(); config.Tongue.MouthMode = MouthMode.ModelOnly;
-    config.Tongue.Enabled = false; Set(module, "config", config);
+    var values = new float[50];
+    values[(int)MouthChannel.MouthLeft] = .31f;
+    values[(int)MouthChannel.MouthUpperLeft] = .81f;
+    values[(int)MouthChannel.CheekSuckLeft] = .44f;
+    values[(int)MouthChannel.TongueUp] = .52f;
+    SendMouth(receiver, MouthPacket(seq: 1, mask: Mask(MouthChannel.MouthLeft, MouthChannel.MouthUpperLeft,
+        MouthChannel.CheekSuckLeft, MouthChannel.TongueUp)) with { Values = values });
     Call(module, "Write", Output(.17f));
-    Near(Weight(UnifiedExpressions.JawOpen), 0); Near(Weight(UnifiedExpressions.TongueOut), 0);
-    Near(Weight(UnifiedExpressions.TongueLeft), 0); Near(Weight(UnifiedExpressions.EyeWideLeft), .731f);
-    module.Teardown();
-});
-Test("hybrid_invalid_native_quality_and_out_of_range_scalars_allow_model_fallback", () => {
-    var module = Module(); Sentinel(); using var receiver = new TongueReceiver(); Set(module, "tongue", receiver);
-    SendMouth(receiver, MouthPacket(mask: Mask(MouthChannel.JawOpen, MouthChannel.MouthRollLower,
-        MouthChannel.MouthPressL, MouthChannel.TongueOut)));
-    var values = new float[52]; var present = Enumerable.Repeat(true, 52).ToArray();
-    values[(int)PicoShape.JawOpen] = -1;
-    values[(int)PicoShape.MouthRollLower] = float.NaN;
-    present[(int)PicoShape.MouthPressL] = false;
-    Call(module, "Write", Output(.17f) with { FreshMouth = new(values, present, true, true, 1, 1) });
-    Near(Weight(UnifiedExpressions.JawOpen), .12f);
-    Near(Weight(UnifiedExpressions.LipSuckLowerLeft), .42f);
-    Near(Weight(UnifiedExpressions.MouthPressLeft), .34f);
+    Near(Weight(UnifiedExpressions.MouthUpperLeft), .81f);
+    Near(Weight(UnifiedExpressions.MouthLowerLeft), .31f);
+    Near(Weight(UnifiedExpressions.CheekSuckLeft), .44f);
+    Near(Weight(UnifiedExpressions.TongueUp), .52f);
+    // Active MFR owns the entire mouth schema: unset channels clear rather than leak Output(.17f).
+    Near(Weight(UnifiedExpressions.JawOpen), 0);
+    Near(Weight(UnifiedExpressions.TongueOut), 0);
+    Near(Weight(UnifiedExpressions.EyeWideLeft), .731f);
+
+    // Explicit release restores direct pipeline mouth values and clears non-native extensions.
+    SendMouth(receiver, MouthPacket(seq: 1, mask: 0, state: MouthState.Release));
+    Call(module, "Write", Output(.17f));
+    Near(Weight(UnifiedExpressions.JawOpen), .23f);
     Near(Weight(UnifiedExpressions.TongueOut), .17f);
-    Call(module, "Write", Output(.17f) with { FreshMouth = new(values, present, true, false, 1, 1) });
-    Near(Weight(UnifiedExpressions.TongueOut), .66f); module.Teardown();
-});
-Test("fresh_mouth_contract_expires_even_when_pipeline_holds_last_values", () => {
-    var config = new ModuleConfig(); var pipeline = new TrackingPipeline(config);
-    var values = new float[52]; values[(int)PicoShape.JawOpen] = .6f;
-    var raw = new RawFace(values, Enumerable.Repeat(true, 52).ToArray(), true, true, 1, 1);
-    var snapshot = SourceSnapshot.Empty(SourceKind.Bridge) with { Face = raw, FaceSequence = 1 };
-    var fresh = pipeline.Evaluate(snapshot, 1.01);
-    Check(fresh.FreshMouth?.Has(PicoShape.JawOpen) == true);
-    Check(pipeline.Evaluate(snapshot with { State = ConnectionState.Faulted }, 1.02).FreshMouth is null);
-    Check(pipeline.Evaluate(snapshot with { State = ConnectionState.Stopped }, 1.02).FreshMouth is null);
-    var held = pipeline.Evaluate(snapshot, 2);
-    Check(held.FreshMouth is null); Near(held.Expressions[ExpressionChannel.JawOpen], .6f);
-    var grouped = snapshot with { GroupedExpressions = true, Mouth = raw, MouthSequence = 1 };
-    Check(pipeline.Evaluate(grouped, 1.02).FreshMouth?.Has(PicoShape.JawOpen) == true);
-    Check(pipeline.Evaluate(grouped, 2).FreshMouth is null);
-    values[(int)PicoShape.JawOpen] = float.NaN;
-    Check(!new RawFace(values, Enumerable.Repeat(true, 52).ToArray(), true, true, 1, 1).Has(PicoShape.JawOpen));
+    Near(Weight(UnifiedExpressions.CheekSuckLeft), 0);
+    Near(Weight(UnifiedExpressions.TongueUp), 0);
+    Near(Weight(UnifiedExpressions.EyeWideLeft), .731f);
+
+    // Expiry after another active MFR packet behaves identically.
+    SendMouth(receiver, MouthPacket(seq: 2, mask: Mask(MouthChannel.MouthLeft, MouthChannel.MouthUpperLeft,
+        MouthChannel.CheekSuckLeft, MouthChannel.TongueUp)) with { Values = values });
+    Call(module, "Write", Output(.17f));
+    Near(Weight(UnifiedExpressions.JawOpen), 0);
+    now += 351;
+    Call(module, "Write", Output(.17f));
+    Near(Weight(UnifiedExpressions.JawOpen), .23f);
+    Near(Weight(UnifiedExpressions.TongueOut), .17f);
+    Near(Weight(UnifiedExpressions.CheekSuckLeft), 0);
+    Near(Weight(UnifiedExpressions.TongueUp), 0);
+    Set(module, "ownsFace", false); Sentinel(); Call(module, "Write", Output(.17f));
+    Check(UnifiedTracking.Data.Shapes.All(s => s.Weight == .731f)); module.Teardown();
 });
 Test("mfr_rejects_lengths_headers_mask_states_and_nonfinite_or_unknown_values", () => {
     var packet = MouthPacket(mask: 1); var bytes = packet.Encode();
@@ -327,30 +222,35 @@ Test("mfr_independent_lips_and_cheeks_override_aggregate_fanout_only_where_valid
     var module = Module(); Sentinel(); using var receiver = new TongueReceiver(); Set(module, "tongue", receiver);
     SendMouth(receiver, MouthPacket(mask: Mask(MouthChannel.CheekPuff, MouthChannel.CheekPuffLeft,
         MouthChannel.MouthLeft, MouthChannel.MouthUpperLeft, MouthChannel.MouthFunnel, MouthChannel.LipFunnelLower)));
-    Call(module, "Write", FreshOutput(.17f, PicoShape.JawOpen, PicoShape.TongueOut));
+    Call(module, "Write", Output(.17f));
     Near(Weight(UnifiedExpressions.CheekPuffLeft), .76f); Near(Weight(UnifiedExpressions.CheekPuffRight), .02f);
     Near(Weight(UnifiedExpressions.MouthUpperLeft), .9f); Near(Weight(UnifiedExpressions.MouthLowerLeft), .28f);
     Near(Weight(UnifiedExpressions.LipFunnelUpperLeft), .26f); Near(Weight(UnifiedExpressions.LipFunnelUpperRight), .26f);
     Near(Weight(UnifiedExpressions.LipFunnelLowerLeft), 1); Near(Weight(UnifiedExpressions.LipFunnelLowerRight), 1);
-    Near(Weight(UnifiedExpressions.JawOpen), .23f); Near(Weight(UnifiedExpressions.TongueOut), .17f);
+    Near(Weight(UnifiedExpressions.JawOpen), 0); Near(Weight(UnifiedExpressions.TongueOut), 0);
     Near(Weight(UnifiedExpressions.CheekSuckLeft), 0); Near(Weight(UnifiedExpressions.TongueUp), 0);
     Near(Weight(UnifiedExpressions.EyeWideLeft), .731f); module.Teardown();
 });
-Test("mfr_upper_only_retains_current_pico_lower_and_tongue_values_are_not_tjr_scaled", () => {
+Test("mfr_upper_only_keeps_valid_aggregate_lower_or_clears_and_tongue_values_are_not_tjr_scaled", () => {
     var module = Module(); Sentinel(); using var receiver = new TongueReceiver(); Set(module, "tongue", receiver);
-    var values = new float[50]; values[(int)MouthChannel.MouthUpperLeft] = .8f;
-    values[(int)MouthChannel.TongueLeft] = .1f; values[(int)MouthChannel.TongueUp] = .2f;
-    values[(int)MouthChannel.TongueOut] = .05f;
+    var values = new float[50];
+    values[(int)MouthChannel.MouthUpperLeft] = .8f; values[(int)MouthChannel.TongueLeft] = .1f;
+    values[(int)MouthChannel.TongueUp] = .2f; values[(int)MouthChannel.TongueOut] = .05f;
     SendMouth(receiver, MouthPacket(mask: Mask(MouthChannel.MouthUpperLeft, MouthChannel.TongueLeft,
         MouthChannel.TongueUp, MouthChannel.TongueOut)) with { Values = values });
-    var output = FreshOutput(.17f, PicoShape.MouthLeft); output.Expressions[ExpressionChannel.MouthLowerLeft] = .37f;
+    var output = Output(.17f); output.Expressions[ExpressionChannel.MouthLowerLeft] = .37f;
     Call(module, "Write", output);
-    Near(Weight(UnifiedExpressions.MouthUpperLeft), .8f); Near(Weight(UnifiedExpressions.MouthLowerLeft), .37f);
+    Near(Weight(UnifiedExpressions.MouthUpperLeft), .8f); Near(Weight(UnifiedExpressions.MouthLowerLeft), 0);
     Near(Weight(UnifiedExpressions.TongueOut), .05f); Near(Weight(UnifiedExpressions.TongueLeft), .1f);
     Near(Weight(UnifiedExpressions.TongueUp), .2f); Near(Weight(UnifiedExpressions.TongueRoll), 0);
-    values[(int)MouthChannel.TongueOut] = 0;
-    SendMouth(receiver, MouthPacket(11, mask: Mask(MouthChannel.TongueLeft, MouthChannel.TongueUp, MouthChannel.TongueOut))
-        with { Values = values.Select((v, i) => i == (int)MouthChannel.MouthUpperLeft ? 0 : v).ToArray() });
+    values[(int)MouthChannel.MouthLeft] = .28f;
+    SendMouth(receiver, MouthPacket(11, mask: Mask(MouthChannel.MouthLeft, MouthChannel.MouthUpperLeft,
+        MouthChannel.TongueLeft, MouthChannel.TongueUp, MouthChannel.TongueOut)) with { Values = values });
+    Call(module, "Write", output);
+    Near(Weight(UnifiedExpressions.MouthUpperLeft), .8f); Near(Weight(UnifiedExpressions.MouthLowerLeft), .28f);
+    values[(int)MouthChannel.TongueOut] = 0; values[(int)MouthChannel.MouthUpperLeft] = 0; values[(int)MouthChannel.MouthLeft] = 0;
+    SendMouth(receiver, MouthPacket(12, mask: Mask(MouthChannel.TongueLeft, MouthChannel.TongueUp, MouthChannel.TongueOut))
+        with { Values = values });
     Call(module, "Write", output); Near(Weight(UnifiedExpressions.TongueLeft), .1f); Near(Weight(UnifiedExpressions.TongueUp), .2f);
     module.Teardown();
 });
@@ -363,7 +263,8 @@ Test("mfr_expiry_mask_loss_and_teardown_clear_owned_schema_without_stale_native_
     Call(module, "Write", Output(.42f)); Near(Weight(UnifiedExpressions.CheekSuckLeft), 0);
     Near(Weight(UnifiedExpressions.JawOpen), 0); Near(Weight(UnifiedExpressions.CheekSuckRight), 0);
     now += 351; Call(module, "Write", Output(.42f)); Near(Weight(UnifiedExpressions.MouthTightenerRight), 0);
-    Near(Weight(UnifiedExpressions.TongueLeft), 0); Near(Weight(UnifiedExpressions.TongueOut), 0);
+    Near(Weight(UnifiedExpressions.TongueLeft), 0); Near(Weight(UnifiedExpressions.TongueOut), .42f);
+    Near(Weight(UnifiedExpressions.JawOpen), .23f);
     now += 1; SendMouth(receiver, MouthPacket(1, session: 200, mask: Mask(MouthChannel.CheekSuckRight)));
     Call(module, "Write", Output(.42f)); module.Teardown(); Near(Weight(UnifiedExpressions.CheekSuckRight), 0);
     Near(Weight(UnifiedExpressions.TongueUp), 0);
@@ -403,7 +304,7 @@ Test("mfr_age_backlog_repeated_sensor_and_rejected_packets_cannot_extend_lease",
     for (ulong seq = 11; seq < 17; seq++) { now += 100; SendMouth(backlog, MouthPacket(seq)); }
     Check(!backlog.Snapshot().Override);
 });
-Test("mfr_is_direct_even_with_legacy_ceiling_and_teardown_clears_the_owned_schema", () => {
+Test("mfr_is_direct_even_with_legacy_ceiling_and_unwritten_extensions_are_not_owned", () => {
     var module = Module(); Sentinel(); using var receiver = new TongueReceiver(); Set(module, "tongue", receiver);
     Set(module, "config", new ModuleConfig { LegacyExpressionCeiling = true });
     var values = Enumerable.Repeat(1f, 50).ToArray();
@@ -417,7 +318,7 @@ Test("mfr_is_direct_even_with_legacy_ceiling_and_teardown_clears_the_owned_schem
     SendMouth(other, MouthPacket()); // Received, but no SDK Write ever took ownership.
     module.Teardown();
     foreach (var c in new[] { UnifiedExpressions.CheekSuckLeft, UnifiedExpressions.TongueUp,
-        UnifiedExpressions.TongueLeft, UnifiedExpressions.MouthTightenerLeft }) Near(Weight(c), 0);
+        UnifiedExpressions.TongueLeft, UnifiedExpressions.MouthTightenerLeft }) Near(Weight(c), .731f);
 });
 Test("mfr_pause_error_and_source_replacement_release_extensions_and_do_not_replay_old_results", () => {
     foreach (bool fail in new[] { false, true }) {
@@ -619,9 +520,9 @@ Test("module_write_releases_to_latest_pipeline_without_touching_updown", () => {
     Near(Weight(UnifiedExpressions.JawOpen), .23f); Near(Weight(UnifiedExpressions.TongueUp), .731f); module.Teardown();
 });
 Test("no_packets_or_disabled_receiver_keeps_native_and_clears_own_directions", () => {
-    Sentinel(); var module = Module(); Call(module, "Write", FreshOutput(.32f, PicoShape.TongueOut));
+    Sentinel(); var module = Module(); Call(module, "Write", Output(.32f));
     Near(Weight(UnifiedExpressions.TongueOut), .32f); Near(Weight(UnifiedExpressions.TongueLeft), 0);
-    Near(Weight(UnifiedExpressions.TongueRight), 0); Near(Weight(UnifiedExpressions.TongueUp), 0); module.Teardown();
+    Near(Weight(UnifiedExpressions.TongueRight), 0); Near(Weight(UnifiedExpressions.TongueUp), .731f); module.Teardown();
 });
 Test("pc_tongue_respects_existing_legacy_expression_ceiling", () => {
     Sentinel(); var module = Module(); var config = new ModuleConfig { LegacyExpressionCeiling = true };
@@ -642,17 +543,24 @@ Test("bind_conflict_does_not_break_native_tracking", () => {
     var config = new ModuleConfig(); config.Tongue.Port = ((IPEndPoint)occupied.Client.LocalEndPoint!).Port;
     var module = Module(); Set(module, "config", config); Call(module, "StartTongue");
     Check(Get<TjrUdpReceiver>(module, "tongueTransport") is null);
-    Sentinel(); Call(module, "Write", FreshOutput(.4f, PicoShape.TongueOut)); Near(Weight(UnifiedExpressions.TongueOut), .4f); module.Teardown();
+    Sentinel(); Call(module, "Write", Output(.4f)); Near(Weight(UnifiedExpressions.TongueOut), .4f); module.Teardown();
 });
-Test("config_roundtrip_and_port_validation", () => {
+Test("config_roundtrip_port_validation_and_obsolete_mouth_keys_ignored", () => {
     string path = Path.Combine(Path.GetTempPath(), "pico-tongue-config-" + Guid.NewGuid() + ".json");
     try {
+        ConfigStore.SaveNew(path, new ModuleConfig());
+        string cleanJson = File.ReadAllText(path);
+        Check(!cleanJson.Contains("MouthMode", StringComparison.Ordinal) && !cleanJson.Contains("HybridChannels", StringComparison.Ordinal));
         File.WriteAllText(path, "{\"ConfigVersion\":1,\"Tongue\":{\"Enabled\":false,\"Port\":45692}}");
         var read = ConfigStore.ReadOnly(path, _ => { }); Check(!read.Tongue.Enabled && read.Tongue.Port == 45692);
         File.WriteAllText(path, "{\"ConfigVersion\":1}"); read = ConfigStore.ReadOnly(path, _ => { });
-        Check(read.Tongue.Enabled && read.Tongue.Port == 45682 && read.Tongue.MouthMode == MouthMode.Hybrid);
-        File.WriteAllText(path, "{\"ConfigVersion\":1,\"Tongue\":{\"MouthMode\":\"ModelOnly\"}}");
-        read = ConfigStore.ReadOnly(path, _ => { }); Check(read.Tongue.MouthMode == MouthMode.ModelOnly);
+        Check(read.Tongue.Enabled && read.Tongue.Port == 45682);
+        var logs = new List<string>();
+        File.WriteAllText(path, "{\"ConfigVersion\":1,\"Tongue\":{\"MouthMode\":\"ModelOnly\",\"HybridChannels\":[\"JawOpen\"]}}");
+        read = ConfigStore.ReadOnly(path, logs.Add);
+        Check(read.Tongue.Enabled && read.Tongue.Port == 45682 &&
+            logs.Any(m => m.Contains("Tongue.MouthMode", StringComparison.Ordinal)) &&
+            logs.Any(m => m.Contains("Tongue.HybridChannels", StringComparison.Ordinal)));
         read.Tongue.Port = 0; Check(ConfigValidator.Validate(read, _ => { }).Tongue.Port == 45682);
     } finally { File.Delete(path); }
 });
@@ -718,6 +626,98 @@ tests.Add(("module_stop_joins_worker_releases_socket_and_restarts", async () => 
         await sender.SendAsync(Packet().Encode(), new IPEndPoint(IPAddress.Loopback, Get<TjrUdpReceiver>(module, "tongueTransport")!.Port));
         await Wait(() => next.Snapshot().Override);
     } finally { module.Teardown(); }
+}));
+tests.Add(("real_udp_bridge_yields_face_subscription_during_mfr_without_dropping_eyes", async () => {
+    using var fakeBridge = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+    int fakePort = ((IPEndPoint)fakeBridge.Client.LocalEndPoint!).Port;
+    var settings = new BridgeSettings { IP = "127.0.0.1", ListenAddress = "127.0.0.1", ReconnectMs = 100 };
+    using var source = new BridgeUdpSource(settings, _ => { }, eyeEnabled: true, faceEnabled: true, listenPort: 0, peerPort: fakePort);
+    using var cts = new CancellationTokenSource();
+    byte[] EyePacket(ulong epoch, int mask, ulong ts, float pupilMm) {
+        var b = new byte[83];
+        b[0] = (byte)'E'; b[1] = (byte)mask; b[2] = 0;
+        BinaryPrimitives.WriteUInt64LittleEndian(b.AsSpan(3), epoch);
+        BinaryPrimitives.WriteUInt64LittleEndian(b.AsSpan(11), ts);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(19), 0x906u);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(23), 0x906u);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(27), 0x906u);
+        BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(67), 0.9f);
+        BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(71), 0.9f);
+        BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(75), pupilMm * 10f);
+        BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(79), pupilMm * 10f);
+        return b;
+    }
+    byte[] XV2Packet(ulong epoch, int mask, ulong leftTs, ulong rightTs, ulong mouthTs, float eyeUp, float jawOpen) {
+        int[] shapes = mask == 1 ? BridgeSplitDecoder.EyeAuxiliaryShapes.ToArray() : Enumerable.Range(0, 52).ToArray();
+        var b = new byte[19 + shapes.Length * 4 + 36];
+        b[0] = (byte)'X'; b[1] = (byte)mask; b[2] = (byte)mask;
+        BinaryPrimitives.WriteUInt64LittleEndian(b.AsSpan(3), epoch);
+        BinaryPrimitives.WriteUInt64LittleEndian(b.AsSpan(11), leftTs);
+        for (int i = 0; i < shapes.Length; i++) {
+            float v = shapes[i] == (int)PicoShape.EyeLookUpL ? eyeUp : shapes[i] == (int)PicoShape.JawOpen ? jawOpen : 0f;
+            BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(19 + i * 4), v);
+        }
+        int ext = 19 + shapes.Length * 4;
+        BinaryPrimitives.WriteInt32LittleEndian(b.AsSpan(ext), 2);
+        BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(ext + 4), 0.25f);
+        BinaryPrimitives.WriteInt32LittleEndian(b.AsSpan(ext + 8), 1);
+        BinaryPrimitives.WriteInt32LittleEndian(b.AsSpan(ext + 12), 1);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(ext + 16), mask == 1 ? 3u : 7u);
+        BinaryPrimitives.WriteInt64LittleEndian(b.AsSpan(ext + 20), mask == 1 ? 0L : (long)mouthTs);
+        BinaryPrimitives.WriteInt64LittleEndian(b.AsSpan(ext + 28), (long)rightTs);
+        return b;
+    }
+    async Task<(IPEndPoint Remote, string Id, int Mask)> ExpectDiscoverAndSub(int expectedMask, ulong epoch) {
+        string? subId = null; IPEndPoint remote = null!;
+        var sw = Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < 2000) {
+            var res = await fakeBridge.ReceiveAsync(cts.Token).AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+            remote = res.RemoteEndPoint;
+            var msg = System.Text.Encoding.ASCII.GetString(res.Buffer);
+            if (msg == "DISCOVER_DAEMON") {
+                var modeBytes = System.Text.Encoding.ASCII.GetBytes("PXR_MODE mode=enhance rooted=1 enhance=1 gate=1 plugin=dual");
+                await fakeBridge.SendAsync(modeBytes, remote);
+            } else if (msg.StartsWith("PXR_SUB ", StringComparison.Ordinal)) {
+                int mask = msg[^1] - '0';
+                Check(mask == expectedMask, $"Expected PXR_SUB mask={expectedMask}, got '{msg}'");
+                subId = msg.Substring(11, 16);
+                var ack = System.Text.Encoding.ASCII.GetBytes($"PXR_SUB_ACK id={subId} mask={mask} epoch={epoch:x16}");
+                await fakeBridge.SendAsync(ack, remote);
+                return (remote, subId, mask);
+            }
+        }
+        throw new TimeoutException($"Timed out waiting for PXR_SUB mask={expectedMask}");
+    }
+
+    source.Start(cts.Token);
+    var (pcEp, _, _) = await ExpectDiscoverAndSub(3, 1);
+    await Wait(() => source.Snapshot.Protocol == InputProtocol.BridgeSplit);
+    await fakeBridge.SendAsync(XV2Packet(1, 3, 100, 100, 100, 0.5f, 0.6f), pcEp);
+    await Wait(() => source.Snapshot.Mouth is not null);
+    await fakeBridge.SendAsync(EyePacket(1, 3, 100, 4.2f), pcEp);
+    await Wait(() => source.Snapshot.Eye is not null && source.Snapshot.Mouth is not null);
+    long initialGeneration = source.Snapshot.Generation;
+    Near(source.Snapshot.Eye!.Left.PupilMillimeters, 4.2f);
+    Near(source.Snapshot.Mouth![PicoShape.JawOpen], 0.6f);
+
+    source.SetExternalMouthActive(true);
+    Check(source.Snapshot.Mouth is null && source.Snapshot.Eye is not null, "External mouth demand immediately clears cached mouth while preserving eye");
+    await ExpectDiscoverAndSub(1, 2);
+    await Wait(() => source.Snapshot.Detail.Contains("preserving eyes", StringComparison.Ordinal));
+    Check(source.Snapshot.Generation == initialGeneration && source.Snapshot.Eye is not null, "Yielding face subscription must preserve eye generation and pupil");
+    await fakeBridge.SendAsync(EyePacket(2, 1, 200, 4.4f), pcEp);
+    await fakeBridge.SendAsync(XV2Packet(2, 1, 200, 200, 0, 0.7f, 0.9f), pcEp);
+    await Wait(() => Math.Abs(source.Snapshot.Eye!.Left.PupilMillimeters - 4.4f) < 0.01f &&
+        source.Snapshot.Face is { } f && Math.Abs(f[PicoShape.EyeLookUpL] - 0.7f) < 0.01f);
+    Check(source.Snapshot.Mouth is null, "Mask=1 eye stream carries no mouth data");
+
+    source.SetExternalMouthActive(false);
+    await ExpectDiscoverAndSub(3, 3);
+    await Wait(() => source.Snapshot.Detail.Contains("effective=3", StringComparison.Ordinal));
+    Check(source.Snapshot.Generation == initialGeneration && source.Snapshot.Eye is not null, "Resuming face subscription must preserve eye generation");
+    await fakeBridge.SendAsync(XV2Packet(3, 3, 300, 300, 300, 0.5f, 0.55f), pcEp);
+    await Wait(() => source.Snapshot.Mouth is not null && Math.Abs(source.Snapshot.Mouth[PicoShape.JawOpen] - 0.55f) < 0.01f);
+    cts.Cancel();
 }));
 
 int failed = 0; var reports = new List<object>();

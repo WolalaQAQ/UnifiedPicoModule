@@ -76,13 +76,11 @@ TJR与MFR使用同一接收器、同一份顺序记录。同一会话内seq必�
 
 ### SDK映射
 
-模块唯一的`Write`边界按`Tongue.MouthMode`与`Tongue.HybridChannels`合并：Hybrid模式下，对`HybridChannels`允许的原生通道（默认`null`表示全部33项）逐项优先采用存在、有效且新鲜的原厂标量（包括0），其余通道及缺失处用模型有效新鲜值；ModelOnly全部嘴部只用MFR值。前33项复用`NeutralFaceMapper`映射，其余按同名SDK字段写入；`LipFunnelUpper/Lower`分别复制给该唇左右两个Funnel字段。
+模块唯一的 `Write` 边界在收到新鲜活跃的 `MFR1` 流时，先清空本模块拥有的 50 项嘴部 schema，再直接按 `MFR1` 有效位写入收到的控制量（`Hybrid` / `ModelOnly` 逐通道合流已在 PC Studio 完成）。同时，模块自动向 `BridgeSplit` 发送 `PXR_SUB` 将订阅收敛到仅眼动（`mask=1`，眼动启用时），且整个重新协商过程保留当前活的眼部状态与序号，不断流也不回正；待 `MFR1` 释放、断开或过期后，模块清零扩展字段（33–49）并在次帧切回直连 Bridge 面部（`mask=3`）。
 
-独立左右CheekPuff、上下唇横移和上下唇Funnel只在自身有效时覆盖聚合量的对应目标。只有`MouthUpperLeft`有效时，下唇使用有效聚合量、混合模式下新鲜的原厂代理值，或在两者均缺失时清零。原厂扇出复制不算独立观测。
+前 33 项复用 `NeutralFaceMapper` 映射，其余按同名 SDK 字段写入；`LipFunnelUpper/Lower` 分别复制给该唇左右两个 Funnel 字段。独立左右 CheekPuff、上下唇横移和上下唇 Funnel 只在自身有效时覆盖聚合量的对应目标。只有 `MouthUpperLeft` 有效时，下唇保留有效聚合量或清零。
 
-MFR的全部值直接作为`[0,1]`控制量，不使用旧TJR舌头存在阈值、方向缩放、额外乘TongueOut、legacy 0.99上限或PICO后处理规则。TongueOut为0或未知，也不会取消独立有效的方向／Roll。
-
-每次整嘴写入均清除本模块拥有的50字段schema中未知的目标，因此掩码消失、过期或释放不会保留前帧模型值或原厂管线过期值。Hybrid仍可用当前新鲜原厂观测，ModelOnly不回退原厂。`ownsFace=false`时不改任何嘴部值。这些映射使用官方SDK5／6已有通道，无需修改宿主或枚举。
+MFR 的全部值直接作为 `[0,1]` 控制量，不使用旧 TJR 舌头存在阈值、方向缩放、额外乘 TongueOut、legacy 0.99 上限或 PICO 后处理规则。TongueOut 为 0 或未知，也不会取消独立有效的方向／Roll。`ownsFace=false` 时不改写任何嘴部值。这些映射使用官方 SDK5／6 已有通道，无需修改宿主或枚举。
 
 ### 合成互通测试
 

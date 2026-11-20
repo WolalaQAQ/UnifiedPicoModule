@@ -1,5 +1,4 @@
 using UnifiedPicoModule.Core;
-using UnifiedPicoModule.Protocol;
 
 namespace UnifiedPicoModule.Configuration;
 
@@ -20,13 +19,10 @@ public sealed class ModuleConfig
     public PostProcessingSettings PostProcessing { get; set; } = new();
     public MigrationMetadata? Migration { get; set; }
 }
-public enum MouthMode { Hybrid, ModelOnly }
 public sealed class TongueSettings
 {
     public bool Enabled { get; set; } = true;
     public int Port { get; set; } = 45682;
-    public MouthMode MouthMode { get; set; } = MouthMode.Hybrid;
-    public List<MouthChannel>? HybridChannels { get; set; }
 }
 public sealed class BridgeSettings
 {

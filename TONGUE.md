@@ -2,22 +2,22 @@
 
 English | [简体中文](TONGUE_zh.md)
 
-Use `feat/tongue-pc` in both this repository and [PicoET-Enhance](https://github.com/WolalaQAQ/PicoET-Enhance/tree/feat/tongue-pc). The [sender guide](https://github.com/WolalaQAQ/PicoET-Enhance/blob/feat/tongue-pc/TONGUE.md) covers camera capture, the PC app, recording, regression models and local teacher/student distillation. The headset captures images, the PC handles configuration and inference, and this module merges numeric results at the existing VRCFT Write boundary. It does not run models or start the camera.
+Use `feat/tongue-pc` in both this repository and [PicoET-Enhance](https://github.com/WolalaQAQ/PicoET-Enhance/tree/feat/tongue-pc). The [sender guide](https://github.com/WolalaQAQ/PicoET-Enhance/blob/feat/tongue-pc/TONGUE.md) covers camera capture, the PC app, per-channel native/model routing (`Hybrid` vs `ModelOnly`), regression models and local teacher/student distillation. The headset captures images, the PC app runs inference and channel routing, and this module writes the received mouth vector directly to the VRCFT SDK when an `MFR1` stream is active while automatically unsubscribing Bridge face channels without interrupting eye tracking.
 
 ## Build and use
 
 1. Prepare the pinned official VRCFT SDK and build using [Development](docs/development.md). The dependency remains VRCFT 5.4.5 / .NET 10.
 2. With VRCFT closed, install your built module following [Installation](README.md#installation). Keep your existing configuration; do not load two copies of this module.
-3. Let VRCFT assign face output to the PICO module when testing whole-mouth regression. The PC app does not select or override the mouth source.
+3. Let VRCFT assign face output to the PICO module when testing whole-mouth regression. When PC Studio streams `MFR1`, this module yields Bridge face demand (`PXR_SUB` mask 3 → 1) while keeping eyes running, and returns to direct Bridge tracking when PC Studio stops.
 4. Enable the app's local UDP output to `127.0.0.1:45682`, then start live input. `Tongue.Port` must match the app's output port.
 
 The configuration section defaults to:
 
 ```json
-"Tongue": { "Enabled": true, "Port": 45682, "MouthMode": "Hybrid", "HybridChannels": null }
+"Tongue": { "Enabled": true, "Port": 45682 }
 ```
 
-`Port` accepts 1–65535; invalid values fall back to 45682. Omitted settings use defaults without rewriting an existing file. `Enabled=false` disables the receiver. The bind address is always IPv4 loopback. Bind failure is logged and leaves normal PICO tracking running. Configuration changes take effect on module initialization.
+`Port` accepts 1–65535; invalid values fall back to 45682. Omitted settings use defaults without rewriting an existing file. `Enabled=false` disables the receiver. The bind address is always IPv4 loopback. Bind failure is logged and leaves normal PICO tracking running. Configuration changes take effect on module initialization. If an older JSON still contains `Tongue.MouthMode` or `Tongue.HybridChannels`, they are logged as unknown keys and ignored; configure channel routing in PC Studio instead.
 
 Only `ownsFace && Tongue.Enabled` opens the socket. With Cymple mouth + PICO eyes, the PICO module opens no tongue port and writes no foreign mouth/tongue fields. Keep that ownership split in the host.
 
@@ -25,16 +25,7 @@ Only `ownsFace && Tongue.Enabled` opens the socket. With Cymple mouth + PICO eye
 
 End-to-end models use 256-byte MFR1 with the `pico-mouth50-v1` schema on the same loopback UDP port. It carries 50 named continuous controls and a validity mask. The original 44 fields retain their order; four independent upper/lower lip horizontal controls and two upper/lower Funnel controls are appended. The manifest's explicit `valid_mask` may enable only independently `validated_channels` within `trained_channels`; a zero-mask candidate stays disabled.
 
-| `Tongue.MouthMode` | Whole-mouth output |
-|---|---|
-| `Hybrid` (default) | Each present, valid, fresh native scalar takes priority, including zero. Use a fresh, valid model value only where that scalar is unavailable; clear fields unavailable from both |
-| `ModelOnly` | Use only fresh model fields. Unknown fields, release, disconnection and expiry clear the owned mouth schema, even when native values exist |
-
-Set this one field in the module JSON and reinitialize the module/restart VRCFT to apply it. Old configurations that omit it use `Hybrid` without being rewritten. ModelOnly also clears the mouth before its first model result or when the receiver cannot bind; it never falls back to native output. The PC service sends model results only and has no second mode selector.
-
-When `MouthMode` is `Hybrid`, optional `Tongue.HybridChannels` controls which of the 33 native mouth channels (`CheekPuff` through `TongueOut`) prefer native observations: `null` (default) uses all 33 native-capable channels in Hybrid; a non-null list (for example `["JawOpen", "MouthFunnel", "MouthPucker"]` or `[]`) restricts native-first Hybrid to only the listed channels, while all other mouth channels use valid model fields and clear to `0` on expiry without native fallback. Extended channels (`33..49`) and duplicates are invalid in `HybridChannels` and fall back to `null` with a log message.
-
-Native support is checked against the actual fresh `RawFace` observation, its face validity, field presence and finite `[0,1]` value—not held pipeline values or synthetic post-processing output. Aggregate CheekPuff, MouthLeft/Right and MouthFunnel fan-outs do not supply independently measured left/right cheeks, upper/lower lip movement or upper/lower Funnel: valid independent model fields may replace those proxies in Hybrid. Eyes retain their existing source. When another module such as Cymple owns the mouth, neither mode writes or clears its fields.
+Channel selection between headset native `PSL1` (`final33`) and PC model predictions happens live in PC Studio (`mouth_mode`: `hybrid` or `model_only`, and optional `hybrid_channels`). Whenever fresh `MFR1` results arrive here, this module clears its owned mouth schema, writes every enabled MFR1 channel directly to VRCFT, and asks `PicoFacialBridge` to pause native face forwarding (`PXR_SUB mask=1` when eyes are active) without resetting live eye state. When MFR1 releases, disconnects or expires, extended fields (`33..49`) are cleared and mouth output seamlessly returns to direct Bridge tracking (`PXR_SUB mask=3` when eyes are active). Eyes always retain their own direct Bridge path; when another module such as Cymple owns the mouth, this receiver neither opens nor writes/clears foreign mouth fields.
 
 MFR1 does not apply legacy TJR tongue-presence thresholds, direction remapping or an `Out * direction` gate. Zero and small nonzero predictions remain model controls. Sequence, sensor time, session retirement and source age enforce freshness; duplicates do not renew expiry. See [Protocol](docs/protocol.md) for the exact layout.
 

@@ -137,9 +137,7 @@ With a complete `HeaderProfile`, a 29765 datagram must meet the length and `trac
 
 ## Tongue
 
-`MouthMode` accepts `"Hybrid"` (default, native-valid-first with model gap filling) or `"ModelOnly"` (model-only mouth, clearing unknown/expired fields). Existing JSON that omits it uses Hybrid without rewriting the file. Under `Hybrid`, `HybridChannels` (`null` by default) optionally accepts an array of unique native `MouthChannel` names (`CheekPuff` through `TongueOut`); only listed channels use native-first Hybrid while unlisted channels behave as `ModelOnly`. Duplicate or extension channels (`33..49`) are logged and reset `HybridChannels` to `null`. Eyes and VRCFT mouth ownership remain independent. See [whole-mouth modes](../TONGUE.md#mfr1-whole-mouth-output).
-
-`Enabled` defaults to `true`. `Port` defaults to `45682`, accepts 1–65535, and falls back to 45682 for invalid values. The address is always `127.0.0.1`; the receiver opens only when this module owns face output. Missing settings use these defaults without rewriting an existing file. PC tongue results always expire within 350 ms, independently of `Stale.NeutralizeOnTimeout`. See [PC tongue setup and protocol](../TONGUE.md).
+`Enabled` defaults to `true`. `Port` defaults to `45682`, accepts 1–65535, and falls back to 45682 for invalid values. The address is always `127.0.0.1`; the receiver opens only when this module owns face output. Missing settings use these defaults without rewriting an existing file. PC tongue and whole-mouth results always expire within 350 ms, independently of `Stale.NeutralizeOnTimeout`. Per-channel Hybrid/ModelOnly routing is configured in PC Studio rather than in `UnifiedPicoModule.json`. See [PC tongue setup and protocol](../TONGUE.md).
 
 ## Eye resolution and gain
 

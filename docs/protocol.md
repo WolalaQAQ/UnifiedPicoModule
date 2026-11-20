@@ -76,13 +76,13 @@ The lease is 350 ms from the image source, not 350 ms from every arrival. Initia
 
 ### SDK mapping
 
-At the module's sole `Write` boundary, `Tongue.MouthMode=Hybrid` uses present, valid, fresh native scalars first (zero included) for channels enabled by `Tongue.HybridChannels` (`null` means all 33 native mouth channels), then fills missing or model-only controls from valid fresh MFR fields. `ModelOnly` uses only MFR fields for all mouth channels. The first 33 controls reuse `NeutralFaceMapper` correspondence. Extra controls map directly by name, except each `LipFunnelUpper/Lower` is copied to that lip's left and right Funnel channels.
+At the module's sole `Write` boundary, whenever a fresh `MFR1` stream is active, all mouth targets in the 50-field schema are cleared and populated directly from the received `MFR1` packet (`Hybrid` / `ModelOnly` per-channel routing having already been resolved on PC Studio). Simultaneously, the module temporarily reduces its `BridgeSplit` request mask to eye-only (`mask=1` when eyes are active, preserving live eye tracking without resetting eye state) so native face datagrams pause on the network until `MFR1` stops, releases or expires.
 
-Independent supported CheekPuff, upper/lower horizontal, and upper/lower Funnel values take precedence over aggregate fan-out only for their own targets. A valid `MouthUpperLeft` leaves the lower lip at its valid aggregate value, a fresh native proxy in Hybrid, or zero if neither is available. Native fan-out is not independent measurement.
+The first 33 controls reuse `NeutralFaceMapper` correspondence. Extra controls map directly by name, except each `LipFunnelUpper/Lower` is copied to that lip's left and right Funnel channels. Independent supported CheekPuff, upper/lower horizontal, and upper/lower Funnel values take precedence over aggregate fan-out only for their own targets. A valid `MouthUpperLeft` leaves the lower lip at its valid aggregate value, or zero if unsupported.
 
 All MFR values are direct `[0,1]` controls. They do not use legacy TJR presence thresholds, direction scaling, multiplication by TongueOut, the legacy 0.99 ceiling, or PICO post-processing rules. In particular, zero/unsupported TongueOut does not cancel an independently valid direction or Roll.
 
-Each whole-mouth write clears unknown targets in the owned 50-field schema. Mask loss, expiry and release therefore cannot retain a previous model field or stale native pipeline value. Hybrid can still use current fresh native observations; ModelOnly cannot. No face values are changed when `ownsFace=false`. These mappings use existing official SDK5/6 channels without changing the host or its enums.
+When `MFR1` releases, disconnects or expires, extended targets (`33..49`) are cleared and native mouth shapes seamlessly resume from the direct PICO pipeline (`BridgeSplit mask=3`). No face values are changed when `ownsFace=false`. These mappings use existing official SDK5/6 channels without changing the host or its enums.
 
 ### Synthetic interoperability tests
 

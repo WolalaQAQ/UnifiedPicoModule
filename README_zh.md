@@ -71,13 +71,11 @@ PICO 头显的追踪数据可以通过多种发送端输出，包括 PicoFacialB
 | `EyeGain` | 均为 `1` | 分别设置左右眼视线 X、Y 轴与睁眼度的增益 |
 | `AllowFallback` | `false` | 当前数据源不可用时，是否切换到另一数据源 |
 | `Streaming.LocalOnly` | `true` | 仅接受本机发出的串流数据。PICO Connect 在本机运行，通常无需修改 |
-| `Tongue.Enabled` / `Tongue.Port` | `true` / `45682` | 仅当本模块拥有面部输出权时，从IPv4环回地址接收PC整嘴回归或兼容舌头结果 |
-| `Tongue.MouthMode` | `Hybrid` | 混合模式优先使用原厂有效新鲜嘴部标量、模型补缺；`ModelOnly`完整模式只用模型，未知／过期字段清除 |
-| `Tongue.HybridChannels` | `null` | `Hybrid`模式下为`null`表示全部33个原生嘴部通道都走原生优先；填通道名数组时仅列表内通道走Hybrid，其余只用模型 |
+| `Tongue.Enabled` / `Tongue.Port` | `true` / `45682` | 仅当本模块拥有面部输出权时，从 IPv4 环回地址接收 PC Studio 的整嘴结果（`MFR1`）或兼容舌头结果（`TJR1`/`TJR2`） |
 
 完整的字段说明、取值范围和默认值请参阅[配置说明](docs/configuration_zh.md)。
 
-`feat/tongue-pc`分支接收配套PC App的端到端整嘴结果：头显取图，PC配置／推理，VRCFT模块按字段有效位合并输出。构建、所有权、过期与离线检查见[PC整嘴说明](TONGUE_zh.md)。保留TJR1／TJR2数值兼容，不在模块内运行模型，也不使用旧头显UDP19031协议。
+`feat/tongue-pc` 分支接收 PC Studio 发来的 50 路整嘴结果：模型推理和 `Hybrid` / `ModelOnly` 逐通道分流全部在 PC Studio 内完成；模块直接输出收到的 `MFR1` 结果，并在增强面捕活跃时自动退订 Bridge 原生面部以节省流量、保持眼动直连，停止后自动切回 Bridge 直连。构建、所有权、过期与离线检查见[PC整嘴说明](TONGUE_zh.md)。保留 TJR1／TJR2 数值兼容，不在模块内运行模型，也不使用旧头显 UDP19031 协议。
 
 只开启眼动时，Bridge 也会发送 Blink 数据，无需开启面部输出。
 

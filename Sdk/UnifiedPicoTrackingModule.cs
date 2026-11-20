@@ -59,8 +59,7 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
             }
             ModuleInformation.Active = true;
             config = ConfigStore.Load(Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location)!, "UnifiedPicoModule.json"), Log);
-            string hybridDesc = config.Tongue.HybridChannels is { } hc ? $"{hc.Count} selected native channels" : "all 33 native channels";
-            Log($"Whole-mouth mode: {config.Tongue.MouthMode} ({hybridDesc}); fresh native scalars first for Hybrid channels, model only otherwise.");
+            Log("Whole-mouth mode: direct PICO tracking when idle; automatically yields Bridge face demand and accepts MFR1 when PC Studio streams.");
             Log("Eye sources: gaze from the EyeLook shapes; openness from 1 - EyeBlink; native eye packets supply a measured pupil diameter.");
             Log($"Timeout neutralization: {(config.Stale.NeutralizeOnTimeout ? "enabled" : "disabled; hold last values")}.");
             var enabledRules = typeof(PostProcessingSettings).GetProperties().Where(p =>
@@ -94,14 +93,18 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
                     try
                     {
                         if (coordinator is null) StartSources();
-                        var (selected, snapshots, now) = coordinator!.Select();
-                        if (selected?.State is ConnectionState.Faulted or ConnectionState.Stopped ||
-                            snapshots.All(s => s.State is ConnectionState.Faulted or ConnectionState.Stopped))
+                        var tongueView = tongue?.Snapshot();
+                        bool externalMouth = ownsFace && tongueView is { Override: true, Mouth: not null };
+                        coordinator!.SetExternalMouthActive(externalMouth);
+                        var (selected, snapshots, now) = coordinator.Select();
+                        if (!externalMouth && (selected?.State is ConnectionState.Faulted or ConnectionState.Stopped ||
+                            snapshots.All(s => s.State is ConnectionState.Faulted or ConnectionState.Stopped)))
                             RestoreTimerPolicy();
                         else HonorTimerResolution();
                         var output = pipeline.Evaluate(selected, now);
+                        if (externalMouth) pipeline.ClearMouth();
                         double writeStarted = MonotonicClock.Now;
-                        Write(output);
+                        WriteWithTongue(output, tongueView);
                         pipeline.Diagnostics.Written(writeStarted, MonotonicClock.Now);
                         diagnostics!.Report(snapshots, selected, output, now, pipeline.Diagnostics);
                         wasActive = true;
@@ -218,14 +221,15 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
     }
     private void Log(string message) => Logger?.LogInformation("{UnifiedPicoMessage}", message);
 
+    private void Write(TrackingOutput output) => WriteWithTongue(output, tongue?.Snapshot());
+
     // Sole UnifiedTracking write boundary; never zero SDK channels we do not own.
-    private void Write(TrackingOutput output)
+    private void WriteWithTongue(TrackingOutput output, TongueView? tongueView)
     {
         var data = UnifiedTracking.Data;
         foreach (var (channel, sdk) in Channels)
             if (ExpressionFrame.IsEye(channel) ? ownsEye : ownsFace) data.Shapes[(int)sdk].Weight = output.Expressions[channel];
-        mouthAdapter.Apply(tongue?.Snapshot(), data, ownsFace, output, config.Tongue.MouthMode,
-            config.LegacyExpressionCeiling, config.Tongue.HybridChannels);
+        mouthAdapter.Apply(tongueView, data, ownsFace, output.Expressions[ExpressionChannel.TongueOut], config.LegacyExpressionCeiling);
         if (!ownsEye) return;
         data.Eye.Left.Gaze.x = output.Left.GazeX; data.Eye.Left.Gaze.y = output.Left.GazeY;
         data.Eye.Left.Openness = output.Left.Openness; data.Eye.Left.PupilDiameter_MM = SdkPupil(output.Left);

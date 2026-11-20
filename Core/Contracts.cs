@@ -144,5 +144,4 @@ public sealed class ExpressionFrame
 public sealed record ResolvedEye(float GazeX = 0, float GazeY = 0, float Openness = 1,
     float PupilMillimeters = 3.5f, string GazeOrigin = "neutral", bool RealPupil = false,
     string OpennessOrigin = "neutral");
-public sealed record TrackingOutput(ExpressionFrame Expressions, ResolvedEye Left, ResolvedEye Right,
-    RawFace? FreshMouth = null);
+public sealed record TrackingOutput(ExpressionFrame Expressions, ResolvedEye Left, ResolvedEye Right);

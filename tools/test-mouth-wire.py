@@ -69,13 +69,15 @@ def main():
     owned = set()
 
     def baseline():
-        # No fresh RawFace is supplied by this result-only fixture.
-        for name in ALL_TARGETS:
+        for name in NATIVE:
+            expected[name] = .23 if name == 'JawOpen' else .17 if name == 'TongueOut' else 0.
+        for name in EXTENSIONS:
             expected[name] = 0.
 
     def fresh(packet, mask, controls, **extra):
         nonlocal owned
-        baseline()
+        for name in ALL_TARGETS:
+            expected[name] = 0.
         current = set()
         for index, targets in enumerate(TARGETS):
             if mask & (1 << index):
@@ -176,7 +178,7 @@ def main():
                     time.sleep(.36)
                     row = send(first); assert not row['accepted']
                     if not no_face:
-                        assert row['out'] == 0. and row['shapes']['CheekSuckLeft'] == 0.
+                        assert abs(row['out']-.17) < .00001 and row['shapes']['CheekSuckLeft'] == 0.
                     row = send(encode(1, values, ALL_VALID, session=300)); assert row['accepted']
                     assert send(encode(99, values, ALL_VALID))['reason'] == 'retired-session'
                     row = send(encode(1, values, ALL_VALID, session=300, state=1)); assert row['accepted']

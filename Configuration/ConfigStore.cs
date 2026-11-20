@@ -1,7 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using UnifiedPicoModule.Protocol;
 
 namespace UnifiedPicoModule.Configuration;
 
@@ -84,7 +83,7 @@ public static class ConfigStore
             try
             {
                 if (member.Value.ValueKind == JsonValueKind.Null &&
-                     (property.PropertyType == typeof(string) || property.PropertyType == typeof(MigrationMetadata) || property.PropertyType == typeof(StreamingHeaderSettings) || property.PropertyType == typeof(List<MouthChannel>) || Nullable.GetUnderlyingType(property.PropertyType) is not null))
+                     (property.PropertyType == typeof(string) || property.PropertyType == typeof(MigrationMetadata) || property.PropertyType == typeof(StreamingHeaderSettings) || Nullable.GetUnderlyingType(property.PropertyType) is not null))
                 { property.SetValue(target, null); continue; }
                 // Recursively inspect nested objects so diagnostics retain full field paths.
                 if (!strict && property.PropertyType.IsClass && property.PropertyType != typeof(string) &&

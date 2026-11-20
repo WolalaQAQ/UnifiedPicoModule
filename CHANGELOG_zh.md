@@ -2,29 +2,29 @@
 
 [English](CHANGELOG.md) | 简体中文
 
-## [Unreleased] - 2026-11-19
+## [Unreleased] - 2026-11-20
 
 ### 新增
-- 增加`Tongue.HybridChannels`：在`Hybrid`模式下按通道指定走原生优先的名单（默认`null`为全部33个原生嘴部通道；数组形式则仅列表内通道优先使用新鲜原生标量，其余只用模型）。
-- 增加`Tongue.MouthMode`：默认Hybrid逐项优先使用原厂有效新鲜标量（包括0），不足处用模型有效值；ModelOnly不回退原厂，清除未知／过期嘴部字段。
+- 将 VRCFT 模块简化为纯接收输出器：`Hybrid` / `ModelOnly` 逐通道分流与原生 `PSL1` 合流全部移至 `PicoET` PC Studio，模块仅按有效位直接输出收到的 50 路 `MFR1` 结果。
+- `MFR1` 活跃接管嘴部时，自动在 `BridgeSplit` 控制面上暂停原生面部订阅（眼动保持 90 Hz 不中断、不重置缓存），停止输出或过期后无缝恢复 `Bridge` 原生面捕。
 - 在环回UDP45682接收PC本机TJR1舌头结果，用`Tongue.Enabled`／`Tongue.Port`配置。
 - 增加生产接收器、SDK所有权、生命周期及真实Python编码器互通测试。
 - 接收PC App的MouthLink模型所发80字节TJR2，增加Up／Down／Roll，保留原样TJR1及共用新鲜度规则。
-- 接收256字节MFR1端到端整嘴结果：固定50字段、逐字段有效位及来源身份；按有效位覆盖PICO嘴部和独立唇形／脸颊通道。
+- 接收256字节MFR1端到端整嘴结果：固定50字段、逐字段有效位及来源身份。
 
 ### 修复
 - 将已验收的Steam VRCFT 6瞳孔写边界修正同步到开发分支：无实测时写无测量哨兵，保留真实毫米及VRCFT 5的配置占位值。
 
 ### 设计理由
+- 将分流配置与实时勾选集中在 PC Studio 设置界面，无需改动 JSON 或重启 VRCFT 即可边用边调；不使用 PC Studio 时，原有 `Bridge → UnifiedPicoModule` 直连路径完全兼容且零改动。
 - 视频、推理与个人流程由配套PicoET PC App完成，嘴部所有权留给VRCFT，SDK仍从模块原Write边界写入。
-- 新鲜absent为明确负例；invalid／stop／过期恢复当前原厂Out并清Left／Right，源年龄、sensor时间与序号阻止旧图续期。
-- 回归推理留在VRCFT外部，仅在接过TJR2后写扩展通道，并在过期、停止和切回TJR1时清除，避免姿态残留。
-- MFR1直接传递命名连续控制量，不沿用TJR阈值或方向门控。来源有效性取自实际逐通道观测，不取管线保留值或聚合扇出代理；眼源及外部嘴部所有权独立。
+- 新鲜absent为明确负例；TJR invalid／stop／过期恢复当前原厂Out并清Left／Right；MFR 释放或过期清零扩展字段并切回直连嘴部。源年龄、sensor时间与序号阻止旧图续期。
+- MFR1直接传递命名连续控制量，不沿用TJR阈值或方向门控；眼源及外部嘴部所有权完全解耦。
 
 ### 注意事项
+- 已移除 `Tongue.MouthMode` 与 `Tongue.HybridChannels` 配置项；旧 JSON 中若保留这两个字段，读取时按未知键记录日志并忽略，不报错或改写原文件。
 - 混搭只眼动时不占舌头端口、不写外部嘴部；只用TJR1的实例不动Up／Down／Roll，不提供UDP19031订阅或原厂／模型最大值合并。
 - 本次为开发源码整合，真人校准、个人模型准确性及Avatar表现留待实测。SDK依赖与正式版本元数据不变。
-- MFR1与TJR共用接收端口，整嘴推理和教师蒸馏均不进入模块；Cymple拥有嘴部时不写入或清除其字段。
 
 ## [0.4.1] - 2026-11-05
 

@@ -1,5 +1,4 @@
 using UnifiedPicoModule.Core;
-using UnifiedPicoModule.Configuration;
 using UnifiedPicoModule.Mapping;
 using UnifiedPicoModule.Protocol;
 using UnifiedPicoModule.Runtime;
@@ -14,18 +13,13 @@ public sealed class MouthSdkAdapter
     private static readonly HashSet<U> Native = Enum.GetNames<ExpressionChannel>().Select(name => Enum.Parse<U>(name)).ToHashSet();
     private static readonly U[][] Bindings = CreateBindings();
     private static readonly U[] MouthTargets = Bindings.SelectMany(targets => targets).Distinct().ToArray();
-    private static readonly PicoShape[] NativeInputs = Enum.GetValues<MouthChannel>().Take(33)
-        .Select(channel => Enum.Parse<PicoShape>(channel.ToString())).ToArray();
     private readonly HashSet<U> ownedExtensions = [];
-    private bool legacyMode;
+    private bool mouthMode;
 
     internal void RememberMode(TongueView? view)
     {
-        if (view is not null) legacyMode = !view.MouthMode && view.SessionId != 0;
+        if (view is not null) mouthMode = view.MouthMode;
     }
-
-    private static bool NativeAvailable(RawFace? raw, MouthChannel channel) => (int)channel < NativeInputs.Length &&
-        raw is not null && raw.Has(NativeInputs[(int)channel]) && raw[NativeInputs[(int)channel]] is >= 0 and <= 1;
 
     private static U[][] CreateBindings()
     {
@@ -45,58 +39,34 @@ public sealed class MouthSdkAdapter
         return result;
     }
 
-    private static ulong HybridMask(IReadOnlyCollection<MouthChannel>? hybridChannels)
-    {
-        if (hybridChannels is null) return ulong.MaxValue;
-        ulong mask = 0;
-        foreach (var channel in hybridChannels)
-            if ((int)channel is >= 0 and < 33) mask |= 1UL << (int)channel;
-        return mask;
-    }
-
-    private static bool UsesNativeFirst(MouthMode mode, ulong hybridMask, MouthChannel channel) =>
-        mode == MouthMode.Hybrid && (int)channel < 33 && (hybridMask & (1UL << (int)channel)) != 0;
-
-    public void Apply(TongueView? view, UnifiedTrackingData data, bool ownsFace, TrackingOutput output,
-        MouthMode mode, bool legacyExpressionCeiling = false, IReadOnlyCollection<MouthChannel>? hybridChannels = null)
+    public void Apply(TongueView? view, UnifiedTrackingData data, bool ownsFace, float picoTongueOut,
+        bool legacyExpressionCeiling = false)
     {
         if (!ownsFace) { ownedExtensions.Clear(); return; }
         RememberMode(view);
-        ulong hybridMask = mode == MouthMode.Hybrid ? HybridMask(hybridChannels) : 0;
         var next = new HashSet<U>();
-        if (!legacyMode || mode == MouthMode.ModelOnly)
+        if (mouthMode)
         {
-            // Clear the owned schema every write, including unknown/expired model fields.
-            // Native support is a fresh, present scalar, never an output value or a proxy
-            // fan-out (e.g. aggregate Puff does not provide independent left/right Puff).
-            foreach (var sdk in MouthTargets) data.Shapes[(int)sdk].Weight = 0;
-            if (mode == MouthMode.Hybrid && output.FreshMouth is { } raw)
-                foreach (var channel in Enum.GetValues<MouthChannel>().Take(33))
-                    if (UsesNativeFirst(mode, hybridMask, channel) && NativeAvailable(raw, channel))
-                        foreach (var sdk in Bindings[(int)channel])
-                            data.Shapes[(int)sdk].Weight = output.Expressions[Enum.Parse<ExpressionChannel>(sdk.ToString())];
             if (view is { Override: true, Mouth: { } packet })
             {
-                // Standard fan-out first; independently valid fine fields override only their targets.
-                // These are continuous control values, not legacy TJR probabilities or directions.
+                // PC Studio owns channel selection; clear all mouth targets so unset MFR bits cannot leak held pipeline values.
+                foreach (var sdk in MouthTargets) data.Shapes[(int)sdk].Weight = 0;
                 foreach (var channel in Enum.GetValues<MouthChannel>())
                 {
                     if (!packet.Has(channel)) continue;
-                    if (UsesNativeFirst(mode, hybridMask, channel) &&
-                        NativeAvailable(output.FreshMouth, channel)) continue;
                     foreach (var sdk in Bindings[(int)channel])
                     {
                         data.Shapes[(int)sdk].Weight = packet[channel];
                         if (!Native.Contains(sdk)) next.Add(sdk);
                     }
                 }
+                next.UnionWith(MouthTargets.Where(sdk => !Native.Contains(sdk)));
             }
-            next.UnionWith(MouthTargets.Where(sdk => !Native.Contains(sdk)));
         }
         else
         {
             bool extended = view?.Extended == true || ownedExtensions.Contains(U.TongueUp);
-            TongueSdkAdapter.ApplyView(view, data, true, output.Expressions[ExpressionChannel.TongueOut], legacyExpressionCeiling, extended);
+            TongueSdkAdapter.ApplyView(view, data, true, picoTongueOut, legacyExpressionCeiling, extended);
             next.UnionWith([U.TongueLeft, U.TongueRight]);
             if (extended) next.UnionWith([U.TongueUp, U.TongueDown, U.TongueRoll]);
         }

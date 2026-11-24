@@ -76,7 +76,7 @@ TJR与MFR使用同一接收器、同一份顺序记录。同一会话内seq必�
 
 ### SDK映射
 
-模块唯一的 `Write` 边界在收到新鲜活跃的 `MFR1` 流时，先清空本模块拥有的 50 项嘴部 schema，再直接按 `MFR1` 有效位写入收到的控制量（`Hybrid` / `ModelOnly` 逐通道合流已在 PC Studio 完成）。同时，模块自动向 `BridgeSplit` 发送 `PXR_SUB` 将订阅收敛到仅眼动（`mask=1`，眼动启用时），且整个重新协商过程保留当前活的眼部状态与序号，不断流也不回正；待 `MFR1` 释放、断开或过期后，模块清零扩展字段（33–49）并在次帧切回直连 Bridge 面部（`mask=3`）。
+模块唯一的 `Write` 边界在收到新鲜活跃的 `MFR1` 流时，仅按 `MFR1` 的 `valid_mask` 覆写对应通道（`Hybrid` / `ModelOnly` 逐通道合流已在 PC Studio 完成），不再把未置位的原厂嘴部通道强行清零。只有当 `MFR1` 覆盖了全部 33 个原厂嘴部通道（包含聚合与拆分等价覆盖，如 `CheekPuffLeft+Right` 覆盖 `CheekPuff`、`LipFunnelUpper+Lower` 覆盖 `MouthFunnel`、`MouthUpperLeft+LowerLeft` 覆盖 `MouthLeft`、`MouthUpperRight+LowerRight` 覆盖 `MouthRight`）时，模块才会向 `BridgeSplit` 发送 `PXR_SUB` 将订阅收敛到仅眼动（`mask=1`，眼动启用时），且重新协商期间保留活的眼部状态与序号，不断流也不回正。当 `MFR1` 仅包含部分通道（例如仅输出 6 路舌头的个人模型，或头显 `PSL1` 暂时断流）时，模块保持 Bridge 面部订阅（`mask=3`），由 Bridge 继续驱动未覆盖的下巴与嘴唇，并在其上叠加 `MFR1` 置位通道；PC Studio 中显式关闭（`off`）的通道则通过 `valid_mask=1, value=0.0` 明确归零。待扩展通道位消失或 `MFR1` 释放、断开、过期后，模块清零之前写入的纯扩展字段（33–49）并恢复完整直连 Bridge 面部（`mask=3`）。
 
 前 33 项复用 `NeutralFaceMapper` 映射，其余按同名 SDK 字段写入；`LipFunnelUpper/Lower` 分别复制给该唇左右两个 Funnel 字段。独立左右 CheekPuff、上下唇横移和上下唇 Funnel 只在自身有效时覆盖聚合量的对应目标。只有 `MouthUpperLeft` 有效时，下唇保留有效聚合量或清零。
 

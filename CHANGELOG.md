@@ -13,6 +13,7 @@ English | [简体中文](CHANGELOG_zh.md)
 - Accept 256-byte MFR1 end-to-end whole-mouth results with 50 ordered fields, per-field validity and source identity.
 
 ### Fixes
+- Preserve Bridge native mouth tracking when `MFR1` carries only a subset of channels (such as a 6-channel tongue-only personal model or during a headset `PSL1` dropout): `MouthSdkAdapter` now writes only `valid_mask`-set channels instead of clearing all 50 mouth targets, and `BridgeSplit` face demand (`PXR_SUB` mask 3 → 1) yields only when `MFR1` covers all 33 native mouth channels (including aggregate/split equivalence). Channels explicitly set to `off` in PC Studio remain zeroed via `valid_mask=1, value=0.0`.
 - Carry the validated Steam VRCFT 6 pupil write-boundary fix into this development branch: use the unavailable sentinel when there is no measurement, while retaining real millimeters and the VRCFT 5 configured estimate.
 
 ### Design Rationale

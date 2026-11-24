@@ -155,7 +155,7 @@ Test("mfr_exact_layout_all_50_fields_and_roundtrip", () => {
     Check(Enum.GetNames<MouthChannel>().Length == 50 && (int)MouthChannel.MouthUpperLeft == 44);
     foreach (var c in Enum.GetValues<MouthChannel>()) Near(decoded[c], ((int)c + 1) / 50f);
 });
-Test("mfr_active_overrides_all_mouth_targets_and_release_or_expiry_restores_pipeline_mouth", () => {
+Test("mfr_active_overrides_valid_channels_preserves_unset_native_and_release_or_expiry_clears_extensions", () => {
     var module = Module(); Sentinel(); double now = 1000;
     using var receiver = new TongueReceiver(() => now); Set(module, "tongue", receiver);
     var values = new float[50];
@@ -163,20 +163,35 @@ Test("mfr_active_overrides_all_mouth_targets_and_release_or_expiry_restores_pipe
     values[(int)MouthChannel.MouthUpperLeft] = .81f;
     values[(int)MouthChannel.CheekSuckLeft] = .44f;
     values[(int)MouthChannel.TongueUp] = .52f;
-    SendMouth(receiver, MouthPacket(seq: 1, mask: Mask(MouthChannel.MouthLeft, MouthChannel.MouthUpperLeft,
-        MouthChannel.CheekSuckLeft, MouthChannel.TongueUp)) with { Values = values });
+    var partial = MouthPacket(seq: 1, mask: Mask(MouthChannel.MouthLeft, MouthChannel.MouthUpperLeft,
+        MouthChannel.CheekSuckLeft, MouthChannel.TongueUp)) with { Values = values };
+    Check(!partial.CoversAllNativeMouth, "Partial mask must not claim full native mouth coverage");
+    SendMouth(receiver, partial);
     Call(module, "Write", Output(.17f));
     Near(Weight(UnifiedExpressions.MouthUpperLeft), .81f);
     Near(Weight(UnifiedExpressions.MouthLowerLeft), .31f);
     Near(Weight(UnifiedExpressions.CheekSuckLeft), .44f);
     Near(Weight(UnifiedExpressions.TongueUp), .52f);
-    // Active MFR owns the entire mouth schema: unset channels clear rather than leak Output(.17f).
-    Near(Weight(UnifiedExpressions.JawOpen), 0);
-    Near(Weight(UnifiedExpressions.TongueOut), 0);
+    // Partial MFR preserves unset native Bridge/pipeline channels instead of zeroing them.
+    Near(Weight(UnifiedExpressions.JawOpen), .23f);
+    Near(Weight(UnifiedExpressions.TongueOut), .17f);
     Near(Weight(UnifiedExpressions.EyeWideLeft), .731f);
 
+    // Explicit off (valid bit=1, value=0) still zeros the targeted native channel.
+    var explicitOff = MouthPacket(seq: 2, mask: Mask(MouthChannel.JawOpen, MouthChannel.CheekSuckLeft))
+        with { Values = new float[50] };
+    SendMouth(receiver, explicitOff);
+    Call(module, "Write", Output(.17f));
+    Near(Weight(UnifiedExpressions.JawOpen), 0);
+    Near(Weight(UnifiedExpressions.TongueOut), .17f);
+    Near(Weight(UnifiedExpressions.CheekSuckLeft), 0);
+    Near(Weight(UnifiedExpressions.TongueUp), 0);
+
     // Explicit release restores direct pipeline mouth values and clears non-native extensions.
-    SendMouth(receiver, MouthPacket(seq: 1, mask: 0, state: MouthState.Release));
+    SendMouth(receiver, MouthPacket(seq: 3, mask: Mask(MouthChannel.MouthLeft, MouthChannel.MouthUpperLeft,
+        MouthChannel.CheekSuckLeft, MouthChannel.TongueUp)) with { Values = values });
+    Call(module, "Write", Output(.17f));
+    SendMouth(receiver, MouthPacket(seq: 3, mask: 0, state: MouthState.Release));
     Call(module, "Write", Output(.17f));
     Near(Weight(UnifiedExpressions.JawOpen), .23f);
     Near(Weight(UnifiedExpressions.TongueOut), .17f);
@@ -185,10 +200,11 @@ Test("mfr_active_overrides_all_mouth_targets_and_release_or_expiry_restores_pipe
     Near(Weight(UnifiedExpressions.EyeWideLeft), .731f);
 
     // Expiry after another active MFR packet behaves identically.
-    SendMouth(receiver, MouthPacket(seq: 2, mask: Mask(MouthChannel.MouthLeft, MouthChannel.MouthUpperLeft,
+    SendMouth(receiver, MouthPacket(seq: 4, mask: Mask(MouthChannel.MouthLeft, MouthChannel.MouthUpperLeft,
         MouthChannel.CheekSuckLeft, MouthChannel.TongueUp)) with { Values = values });
     Call(module, "Write", Output(.17f));
-    Near(Weight(UnifiedExpressions.JawOpen), 0);
+    Near(Weight(UnifiedExpressions.JawOpen), .23f);
+    Near(Weight(UnifiedExpressions.TongueUp), .52f);
     now += 351;
     Call(module, "Write", Output(.17f));
     Near(Weight(UnifiedExpressions.JawOpen), .23f);
@@ -227,11 +243,11 @@ Test("mfr_independent_lips_and_cheeks_override_aggregate_fanout_only_where_valid
     Near(Weight(UnifiedExpressions.MouthUpperLeft), .9f); Near(Weight(UnifiedExpressions.MouthLowerLeft), .28f);
     Near(Weight(UnifiedExpressions.LipFunnelUpperLeft), .26f); Near(Weight(UnifiedExpressions.LipFunnelUpperRight), .26f);
     Near(Weight(UnifiedExpressions.LipFunnelLowerLeft), 1); Near(Weight(UnifiedExpressions.LipFunnelLowerRight), 1);
-    Near(Weight(UnifiedExpressions.JawOpen), 0); Near(Weight(UnifiedExpressions.TongueOut), 0);
-    Near(Weight(UnifiedExpressions.CheekSuckLeft), 0); Near(Weight(UnifiedExpressions.TongueUp), 0);
+    Near(Weight(UnifiedExpressions.JawOpen), .23f); Near(Weight(UnifiedExpressions.TongueOut), .17f);
+    Near(Weight(UnifiedExpressions.CheekSuckLeft), .731f); Near(Weight(UnifiedExpressions.TongueUp), .731f);
     Near(Weight(UnifiedExpressions.EyeWideLeft), .731f); module.Teardown();
 });
-Test("mfr_upper_only_keeps_valid_aggregate_lower_or_clears_and_tongue_values_are_not_tjr_scaled", () => {
+Test("mfr_upper_only_keeps_valid_aggregate_lower_or_bridge_and_tongue_values_are_not_tjr_scaled", () => {
     var module = Module(); Sentinel(); using var receiver = new TongueReceiver(); Set(module, "tongue", receiver);
     var values = new float[50];
     values[(int)MouthChannel.MouthUpperLeft] = .8f; values[(int)MouthChannel.TongueLeft] = .1f;
@@ -240,9 +256,9 @@ Test("mfr_upper_only_keeps_valid_aggregate_lower_or_clears_and_tongue_values_are
         MouthChannel.TongueUp, MouthChannel.TongueOut)) with { Values = values });
     var output = Output(.17f); output.Expressions[ExpressionChannel.MouthLowerLeft] = .37f;
     Call(module, "Write", output);
-    Near(Weight(UnifiedExpressions.MouthUpperLeft), .8f); Near(Weight(UnifiedExpressions.MouthLowerLeft), 0);
+    Near(Weight(UnifiedExpressions.MouthUpperLeft), .8f); Near(Weight(UnifiedExpressions.MouthLowerLeft), .37f);
     Near(Weight(UnifiedExpressions.TongueOut), .05f); Near(Weight(UnifiedExpressions.TongueLeft), .1f);
-    Near(Weight(UnifiedExpressions.TongueUp), .2f); Near(Weight(UnifiedExpressions.TongueRoll), 0);
+    Near(Weight(UnifiedExpressions.TongueUp), .2f); Near(Weight(UnifiedExpressions.TongueRoll), .731f);
     values[(int)MouthChannel.MouthLeft] = .28f;
     SendMouth(receiver, MouthPacket(11, mask: Mask(MouthChannel.MouthLeft, MouthChannel.MouthUpperLeft,
         MouthChannel.TongueLeft, MouthChannel.TongueUp, MouthChannel.TongueOut)) with { Values = values });
@@ -252,22 +268,42 @@ Test("mfr_upper_only_keeps_valid_aggregate_lower_or_clears_and_tongue_values_are
     SendMouth(receiver, MouthPacket(12, mask: Mask(MouthChannel.TongueLeft, MouthChannel.TongueUp, MouthChannel.TongueOut))
         with { Values = values });
     Call(module, "Write", output); Near(Weight(UnifiedExpressions.TongueLeft), .1f); Near(Weight(UnifiedExpressions.TongueUp), .2f);
+    Near(Weight(UnifiedExpressions.MouthLowerLeft), .37f);
     module.Teardown();
 });
-Test("mfr_expiry_mask_loss_and_teardown_clear_owned_schema_without_stale_native_fallback", () => {
+Test("mfr_expiry_mask_loss_and_teardown_clear_owned_extensions_and_keep_bridge_native", () => {
     var module = Module(); Sentinel(); double now = 1000; using var receiver = new TongueReceiver(() => now);
     Set(module, "tongue", receiver); Set(module, "pipeline", new TrackingPipeline(new ModuleConfig()));
     SendMouth(receiver, MouthPacket(mask: Mask(MouthChannel.CheekSuckLeft, MouthChannel.MouthTightenerRight, MouthChannel.JawOpen)));
     Call(module, "Write", Output(.17f)); Near(Weight(UnifiedExpressions.CheekSuckLeft), .8f);
+    Near(Weight(UnifiedExpressions.JawOpen), .12f);
     SendMouth(receiver, MouthPacket(11, mask: Mask(MouthChannel.MouthTightenerRight)));
     Call(module, "Write", Output(.42f)); Near(Weight(UnifiedExpressions.CheekSuckLeft), 0);
-    Near(Weight(UnifiedExpressions.JawOpen), 0); Near(Weight(UnifiedExpressions.CheekSuckRight), 0);
+    Near(Weight(UnifiedExpressions.JawOpen), .23f); Near(Weight(UnifiedExpressions.CheekSuckRight), .731f);
     now += 351; Call(module, "Write", Output(.42f)); Near(Weight(UnifiedExpressions.MouthTightenerRight), 0);
-    Near(Weight(UnifiedExpressions.TongueLeft), 0); Near(Weight(UnifiedExpressions.TongueOut), .42f);
+    Near(Weight(UnifiedExpressions.TongueLeft), .731f); Near(Weight(UnifiedExpressions.TongueOut), .42f);
     Near(Weight(UnifiedExpressions.JawOpen), .23f);
     now += 1; SendMouth(receiver, MouthPacket(1, session: 200, mask: Mask(MouthChannel.CheekSuckRight)));
     Call(module, "Write", Output(.42f)); module.Teardown(); Near(Weight(UnifiedExpressions.CheekSuckRight), 0);
-    Near(Weight(UnifiedExpressions.TongueUp), 0);
+    Near(Weight(UnifiedExpressions.TongueUp), .731f);
+});
+Test("mfr_native_coverage_contract_handles_split_pairs_and_partial_six_tongue_mask", () => {
+    const ulong sixTongueMask = 0x81F00000000UL;
+    Check(sixTongueMask == Mask(MouthChannel.TongueOut, MouthChannel.TongueLeft, MouthChannel.TongueRight,
+        MouthChannel.TongueUp, MouthChannel.TongueDown, MouthChannel.TongueRoll));
+    Check(!MouthPacket(mask: sixTongueMask).CoversAllNativeMouth);
+    Check(MouthPacket(mask: MfrPacket.AllValid).CoversAllNativeMouth);
+    Check(MouthPacket(mask: (1UL << 33) - 1).CoversAllNativeMouth);
+    ulong splitCovered = ((1UL << 33) - 1) & ~Mask(MouthChannel.CheekPuff, MouthChannel.MouthFunnel,
+        MouthChannel.MouthLeft, MouthChannel.MouthRight);
+    splitCovered |= Mask(MouthChannel.CheekPuffLeft, MouthChannel.CheekPuffRight,
+        MouthChannel.LipFunnelUpper, MouthChannel.LipFunnelLower,
+        MouthChannel.MouthUpperLeft, MouthChannel.MouthLowerLeft,
+        MouthChannel.MouthUpperRight, MouthChannel.MouthLowerRight);
+    Check(MouthPacket(mask: splitCovered).CoversAllNativeMouth, "All 4 split pairs must cover their aggregates");
+    Check(!MouthPacket(mask: splitCovered & ~Mask(MouthChannel.CheekPuffRight)).CoversAllNativeMouth,
+        "Missing one split child without its aggregate parent must not claim full native coverage");
+    Check(!MouthPacket(mask: splitCovered & ~Mask(MouthChannel.JawOpen)).CoversAllNativeMouth);
 });
 Test("mfr_never_writes_or_clears_foreign_face_after_ownership_loss", () => {
     var module = Module(); Sentinel(); using var receiver = new TongueReceiver(); Set(module, "tongue", receiver);
@@ -718,6 +754,157 @@ tests.Add(("real_udp_bridge_yields_face_subscription_during_mfr_without_dropping
     await fakeBridge.SendAsync(XV2Packet(3, 3, 300, 300, 300, 0.5f, 0.55f), pcEp);
     await Wait(() => source.Snapshot.Mouth is not null && Math.Abs(source.Snapshot.Mouth[PicoShape.JawOpen] - 0.55f) < 0.01f);
     cts.Cancel();
+}));
+tests.Add(("real_udp_partial_six_tongue_mfr_keeps_bridge_face_and_jaw_open_and_full_mfr_yields", async () => {
+    using var fakeBridge = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+    int fakePort = ((IPEndPoint)fakeBridge.Client.LocalEndPoint!).Port;
+    var config = new ModuleConfig { Source = SourceSelection.Bridge };
+    config.Bridge.IP = "127.0.0.1";
+    config.Bridge.ListenAddress = "127.0.0.1";
+    config.Bridge.ReconnectMs = 100;
+    var coordinator = new SourceCoordinator(new() { DisableEyeTracking = true, DisableFaceTracking = true }, _ => { });
+    Set(coordinator, "config", config);
+    var bridgeSource = new BridgeUdpSource(config.Bridge, _ => { }, eyeEnabled: true, faceEnabled: true, listenPort: 0, peerPort: fakePort);
+    var sourcesList = (List<ITrackingSource>)typeof(SourceCoordinator).GetField("sources", Hidden)!.GetValue(coordinator)!;
+    var cts = (CancellationTokenSource)typeof(SourceCoordinator).GetField("cancellation", Hidden)!.GetValue(coordinator)!;
+    sourcesList.Add(bridgeSource);
+    bridgeSource.Start(cts.Token);
+
+    var module = Module(ownsFace: true);
+    Set(module, "ownsEye", true);
+    Set(module, "config", config);
+    Set(module, "pipeline", new TrackingPipeline(config));
+    Set(module, "diagnostics", new DiagnosticReporter(_ => { }));
+    Set(module, "coordinator", coordinator);
+    Set(module, "stopped", false);
+    Set(module, "timerPolicyAttempted", true);
+    module.ModuleInformation.Active = true;
+    module.Status = VRCFaceTracking.Core.Library.ModuleState.Active;
+    using var receiver = new TongueReceiver();
+    Set(module, "tongue", receiver);
+    Sentinel();
+
+    var subMasks = new ConcurrentQueue<int>();
+    IPEndPoint? pcEp = null;
+    ulong bridgeEpoch = 0;
+    using var bgCts = new CancellationTokenSource();
+    var bridgeLoop = Task.Run(async () => {
+        while (!bgCts.IsCancellationRequested) {
+            UdpReceiveResult res;
+            try { res = await fakeBridge.ReceiveAsync(bgCts.Token); }
+            catch (OperationCanceledException) { break; }
+            pcEp = res.RemoteEndPoint;
+            var msg = System.Text.Encoding.ASCII.GetString(res.Buffer);
+            if (msg == "DISCOVER_DAEMON") {
+                var modeBytes = System.Text.Encoding.ASCII.GetBytes("PXR_MODE mode=enhance rooted=1 enhance=1 gate=1 plugin=dual");
+                await fakeBridge.SendAsync(modeBytes, pcEp);
+            } else if (msg.StartsWith("PXR_SUB ", StringComparison.Ordinal)) {
+                int mask = msg[^1] - '0';
+                string subId = msg.Substring(11, 16);
+                ulong nextEpoch = ++bridgeEpoch;
+                subMasks.Enqueue(mask);
+                var ack = System.Text.Encoding.ASCII.GetBytes($"PXR_SUB_ACK id={subId} mask={mask} epoch={nextEpoch:x16}");
+                await fakeBridge.SendAsync(ack, pcEp);
+            }
+        }
+    });
+
+    byte[] XV2(ulong epoch, int mask, ulong ts, float jawOpen, float tongueOut) {
+        int[] shapes = mask == 1 ? BridgeSplitDecoder.EyeAuxiliaryShapes.ToArray() : Enumerable.Range(0, 52).ToArray();
+        var b = new byte[19 + shapes.Length * 4 + 36];
+        b[0] = (byte)'X'; b[1] = (byte)mask; b[2] = (byte)mask;
+        BinaryPrimitives.WriteUInt64LittleEndian(b.AsSpan(3), epoch);
+        BinaryPrimitives.WriteUInt64LittleEndian(b.AsSpan(11), ts);
+        for (int i = 0; i < shapes.Length; i++) {
+            float v = shapes[i] == (int)PicoShape.JawOpen ? jawOpen
+                : shapes[i] == (int)PicoShape.TongueOut ? tongueOut
+                : shapes[i] == (int)PicoShape.EyeLookUpL ? 0.5f : 0f;
+            BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(19 + i * 4), v);
+        }
+        int ext = 19 + shapes.Length * 4;
+        BinaryPrimitives.WriteInt32LittleEndian(b.AsSpan(ext), 2);
+        BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(ext + 4), 0.25f);
+        BinaryPrimitives.WriteInt32LittleEndian(b.AsSpan(ext + 8), 1);
+        BinaryPrimitives.WriteInt32LittleEndian(b.AsSpan(ext + 12), 1);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(ext + 16), mask == 1 ? 3u : 7u);
+        BinaryPrimitives.WriteInt64LittleEndian(b.AsSpan(ext + 20), mask == 1 ? 0L : (long)ts);
+        BinaryPrimitives.WriteInt64LittleEndian(b.AsSpan(ext + 28), (long)ts);
+        return b;
+    }
+
+    try {
+        await Wait(() => bridgeEpoch == 1 && pcEp is not null);
+        Check(subMasks.TryDequeue(out int initialMask) && initialMask == 3);
+        await fakeBridge.SendAsync(XV2(1, 3, 100, 0.60f, 0.15f), pcEp!);
+        await Wait(() => bridgeSource.Snapshot.Mouth is not null);
+        module.Update();
+        Near(Weight(UnifiedExpressions.JawOpen), 0.60f);
+        Near(Weight(UnifiedExpressions.TongueOut), 0.15f);
+
+        // Exact tester repro: 6-tongue-only MFR1 (0x81F00000000) must preserve JawOpen=0.60 and keep Bridge mask=3.
+        const ulong sixTongueMask = 0x81F00000000UL;
+        var tVals = new float[50];
+        tVals[(int)MouthChannel.TongueOut] = 0.80f;
+        tVals[(int)MouthChannel.TongueLeft] = 0.35f;
+        tVals[(int)MouthChannel.TongueRight] = 0.10f;
+        tVals[(int)MouthChannel.TongueUp] = 0.45f;
+        tVals[(int)MouthChannel.TongueDown] = 0.20f;
+        tVals[(int)MouthChannel.TongueRoll] = 0.55f;
+        SendMouth(receiver, MouthPacket(seq: 1, mask: sixTongueMask) with { Values = tVals });
+        module.Update();
+        Near(Weight(UnifiedExpressions.JawOpen), 0.60f);
+        Near(Weight(UnifiedExpressions.TongueOut), 0.80f);
+        Near(Weight(UnifiedExpressions.TongueLeft), 0.35f);
+        Near(Weight(UnifiedExpressions.TongueRight), 0.10f);
+        Near(Weight(UnifiedExpressions.TongueUp), 0.45f);
+        Near(Weight(UnifiedExpressions.TongueDown), 0.20f);
+        Near(Weight(UnifiedExpressions.TongueRoll), 0.55f);
+        await Task.Delay(50);
+        Check(subMasks.IsEmpty && bridgeEpoch == 1 && bridgeSource.Snapshot.Mouth is not null,
+            "Partial 6-tongue MFR1 must keep Bridge face subscription (mask=3) active");
+
+        // Explicit off on JawOpen (bit=1, val=0) zeros JawOpen while keeping Bridge mask=3.
+        SendMouth(receiver, MouthPacket(seq: 2, mask: sixTongueMask | Mask(MouthChannel.JawOpen)) with { Values = tVals });
+        module.Update();
+        Near(Weight(UnifiedExpressions.JawOpen), 0f);
+        Near(Weight(UnifiedExpressions.TongueRoll), 0.55f);
+        Check(bridgeEpoch == 1, "Adding one off bit still does not cover all 33 native channels");
+
+        // Full native coverage (all 50 channels) yields Bridge face subscription to mask=1.
+        var fullVals = new float[50];
+        fullVals[(int)MouthChannel.JawOpen] = 0.91f;
+        fullVals[(int)MouthChannel.TongueRoll] = 0.66f;
+        SendMouth(receiver, MouthPacket(seq: 3, mask: MfrPacket.AllValid) with { Values = fullVals });
+        module.Update();
+        await Wait(() => bridgeEpoch == 2);
+        Check(subMasks.TryDequeue(out int yieldedMask) && yieldedMask == 1, "Full MFR1 must yield Bridge to mask=1");
+        Near(Weight(UnifiedExpressions.JawOpen), 0.91f);
+        Near(Weight(UnifiedExpressions.TongueRoll), 0.66f);
+
+        // Dropping back to partial 6-tongue MFR1 (e.g., PSL1 dropout) restores Bridge mask=3 and JawOpen=0.60.
+        SendMouth(receiver, MouthPacket(seq: 4, mask: sixTongueMask) with { Values = tVals });
+        module.Update();
+        await Wait(() => bridgeEpoch == 3);
+        Check(subMasks.TryDequeue(out int restoredMask) && restoredMask == 3, "Partial MFR1 after full must restore Bridge mask=3");
+        await fakeBridge.SendAsync(XV2(3, 3, 200, 0.60f, 0.15f), pcEp!);
+        await Wait(() => bridgeSource.Snapshot.Mouth is not null);
+        module.Update();
+        Near(Weight(UnifiedExpressions.JawOpen), 0.60f);
+        Near(Weight(UnifiedExpressions.TongueOut), 0.80f);
+        Near(Weight(UnifiedExpressions.TongueRoll), 0.55f);
+
+        // Release clears extended tongue channels and restores Bridge TongueOut.
+        SendMouth(receiver, MouthPacket(seq: 4, mask: 0, state: MouthState.Release));
+        module.Update();
+        Near(Weight(UnifiedExpressions.JawOpen), 0.60f);
+        Near(Weight(UnifiedExpressions.TongueOut), 0.15f);
+        Near(Weight(UnifiedExpressions.TongueLeft), 0f);
+        Near(Weight(UnifiedExpressions.TongueRoll), 0f);
+    } finally {
+        bgCts.Cancel();
+        await bridgeLoop;
+        module.Teardown();
+    }
 }));
 
 int failed = 0; var reports = new List<object>();

@@ -94,15 +94,16 @@ public sealed class UnifiedPicoTrackingModule : ExtTrackingModule
                     {
                         if (coordinator is null) StartSources();
                         var tongueView = tongue?.Snapshot();
-                        bool externalMouth = ownsFace && tongueView is { Override: true, Mouth: not null };
-                        coordinator!.SetExternalMouthActive(externalMouth);
+                        bool hasFreshMouth = ownsFace && tongueView is { Override: true, Mouth: not null };
+                        bool yieldBridgeFace = hasFreshMouth && tongueView!.Mouth!.CoversAllNativeMouth;
+                        coordinator!.SetExternalMouthActive(yieldBridgeFace);
                         var (selected, snapshots, now) = coordinator.Select();
-                        if (!externalMouth && (selected?.State is ConnectionState.Faulted or ConnectionState.Stopped ||
+                        if (!hasFreshMouth && (selected?.State is ConnectionState.Faulted or ConnectionState.Stopped ||
                             snapshots.All(s => s.State is ConnectionState.Faulted or ConnectionState.Stopped)))
                             RestoreTimerPolicy();
                         else HonorTimerResolution();
                         var output = pipeline.Evaluate(selected, now);
-                        if (externalMouth) pipeline.ClearMouth();
+                        if (yieldBridgeFace) pipeline.ClearMouth();
                         double writeStarted = MonotonicClock.Now;
                         WriteWithTongue(output, tongueView);
                         pipeline.Diagnostics.Written(writeStarted, MonotonicClock.Now);

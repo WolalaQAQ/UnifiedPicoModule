@@ -12,7 +12,6 @@ public sealed class MouthSdkAdapter
 {
     private static readonly HashSet<U> Native = Enum.GetNames<ExpressionChannel>().Select(name => Enum.Parse<U>(name)).ToHashSet();
     private static readonly U[][] Bindings = CreateBindings();
-    private static readonly U[] MouthTargets = Bindings.SelectMany(targets => targets).Distinct().ToArray();
     private readonly HashSet<U> ownedExtensions = [];
     private bool mouthMode;
 
@@ -49,8 +48,9 @@ public sealed class MouthSdkAdapter
         {
             if (view is { Override: true, Mouth: { } packet })
             {
-                // PC Studio owns channel selection; clear all mouth targets so unset MFR bits cannot leak held pipeline values.
-                foreach (var sdk in MouthTargets) data.Shapes[(int)sdk].Weight = 0;
+                // Overlay only channels whose valid bit is set; unset native channels keep the
+                // Bridge/pipeline values written just before Apply. Enum order visits aggregate
+                // native channels (0..32) before split/extended channels (33..49) so split values win.
                 foreach (var channel in Enum.GetValues<MouthChannel>())
                 {
                     if (!packet.Has(channel)) continue;
@@ -60,7 +60,6 @@ public sealed class MouthSdkAdapter
                         if (!Native.Contains(sdk)) next.Add(sdk);
                     }
                 }
-                next.UnionWith(MouthTargets.Where(sdk => !Native.Contains(sdk)));
             }
         }
         else

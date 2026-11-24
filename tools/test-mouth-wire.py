@@ -76,7 +76,11 @@ def main():
 
     def fresh(packet, mask, controls, **extra):
         nonlocal owned
-        for name in ALL_TARGETS:
+        # Unset native targets retain the Bridge/pipeline baseline written just before Apply;
+        # previously-owned non-native extensions not present in this mask clear to 0.
+        for name in NATIVE:
+            expected[name] = .23 if name == 'JawOpen' else .17 if name == 'TongueOut' else 0.
+        for name in owned:
             expected[name] = 0.
         current = set()
         for index, targets in enumerate(TARGETS):
@@ -106,6 +110,16 @@ def main():
         controls[CHANNELS.index(name)] = value
     mask = sum(1 << CHANNELS.index(name) for name in ('MouthUpperLeft', 'TongueOut', 'TongueLeft', 'TongueUp', 'TongueRoll'))
     fresh(encode(52, controls, mask), mask, controls)
+    # 6-tongue-only partial mask (0x81F00000000) preserves native JawOpen=.23; explicit off (JawOpen bit=1, val=0) zeros it.
+    six_tongue = sum(1 << CHANNELS.index(name) for name in ('TongueOut', 'TongueLeft', 'TongueRight', 'TongueUp', 'TongueDown', 'TongueRoll'))
+    assert six_tongue == 0x81F00000000
+    t_controls = [0.] * 50
+    for name, value in [('TongueOut', .75), ('TongueLeft', .25), ('TongueRight', .15), ('TongueUp', .40), ('TongueDown', .20), ('TongueRoll', .55)]:
+        t_controls[CHANNELS.index(name)] = value
+    fresh(encode(53, t_controls, six_tongue), six_tongue, t_controls)
+    assert expected['JawOpen'] == .23
+    fresh(encode(54, t_controls, six_tongue | (1 << CHANNELS.index('JawOpen'))), six_tongue | (1 << CHANNELS.index('JawOpen')), t_controls)
+    assert expected['JawOpen'] == 0.
     baseline(); owned.clear()
     rows.append(dict(advanceMs=351, expected=expected.copy()))
     rows.append(dict(packet=base64.b64encode(full).decode(), accepted=False,

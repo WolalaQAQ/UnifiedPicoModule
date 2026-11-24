@@ -24,8 +24,23 @@ public sealed record MfrPacket(ulong SessionId, ulong SourceSeq, ulong MouthSens
     public const string Schema = "pico-mouth50-v1";
     public const int Size = 256, ChannelCount = 50;
     public const ulong AllValid = (1UL << ChannelCount) - 1;
+    private const ulong AggregateNativeMask =
+        (1UL << (int)MouthChannel.CheekPuff) |
+        (1UL << (int)MouthChannel.MouthFunnel) |
+        (1UL << (int)MouthChannel.MouthLeft) |
+        (1UL << (int)MouthChannel.MouthRight);
+    private const ulong NonAggregateNativeMask = ((1UL << 33) - 1) & ~AggregateNativeMask;
     public bool Has(MouthChannel channel) => (ValidMask & (1UL << (int)channel)) != 0;
     public float this[MouthChannel channel] => Values.Span[(int)channel];
+
+    // True only when this packet covers all 33 native PICO mouth channels, accepting
+    // each split-channel pair as equivalent coverage for its native aggregate channel.
+    public bool CoversAllNativeMouth =>
+        (ValidMask & NonAggregateNativeMask) == NonAggregateNativeMask &&
+        (Has(MouthChannel.CheekPuff) || (Has(MouthChannel.CheekPuffLeft) && Has(MouthChannel.CheekPuffRight))) &&
+        (Has(MouthChannel.MouthFunnel) || (Has(MouthChannel.LipFunnelUpper) && Has(MouthChannel.LipFunnelLower))) &&
+        (Has(MouthChannel.MouthLeft) || (Has(MouthChannel.MouthUpperLeft) && Has(MouthChannel.MouthLowerLeft))) &&
+        (Has(MouthChannel.MouthRight) || (Has(MouthChannel.MouthUpperRight) && Has(MouthChannel.MouthLowerRight)));
 
     public static bool TryParse(ReadOnlySpan<byte> bytes, out MfrPacket? packet, out string error)
     {

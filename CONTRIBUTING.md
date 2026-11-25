@@ -1,81 +1,76 @@
-# Contributing
+# Contributing to UnifiedPicoModule
 
-English | [简体中文](CONTRIBUTING_zh.md)
+English | [简体中文](CONTRIBUTING_zh.md) · [README](README.md) · [Development Guide](docs/development.md)
 
-Thank you for your interest in this project. Before contributing, it is recommended to read the [development guide](docs/development.md), the [configuration reference](docs/configuration.md) and [Privacy and network security](docs/privacy.md).
+Contributions, bug reports, and hardware test feedback are welcome. Before opening a PR, please read the [development guide](docs/development.md), [protocol reference](docs/protocol.md), and [privacy guide](docs/privacy.md).
 
-## Reporting issues
+## Clean-Room & Third-Party Licensing Rule
 
-When opening an issue, please include as much of the following as possible:
+> [!IMPORTANT]
+> Never copy, translate, or adapt code or assets from repositories without an explicit open-source license.
 
-- what happens and the steps to reproduce it;
-- the module version and the VRCFT version;
-- the sender and its version, for example PicoFacialBridge 0.3.0 or PICO Connect 10.6.6;
-- the headset model, for example PICO 4 Pro;
-- the relevant log from VRCFT's Output page, including the status lines the module writes every 5 seconds;
-- if the problem relates to configuration, `UnifiedPicoModule.json` or the output of the `validate` command.
+- **License-unclear upstream repositories:** In the snapshots reviewed by this project, `PicoStreamingAssistantFTUDP` (SAFT) and `lonelyicer/VRCFTPicoModule` have no clear license. Their implementations must never be copied, ported, or paraphrased into this codebase.
+- **Independent implementation from specs/behavior:** When implementing support based on public wire formats or observed behavior, write the code independently and record the source URL, reviewed commit/version, and scope in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [THIRD_PARTY_NOTICES_zh.md](THIRD_PARTY_NOTICES_zh.md).
+- **Clearly licensed reuse:** If reusing code or assets with a compatible license, document the source, exact version, and file scope, and preserve all license and copyright notices.
 
-## Before sharing logs and configurations
+## Reporting Issues
 
-Logs, configuration files and migration reports may contain personal information. Remove the following before sharing:
+When filing a bug report or hardware compatibility result, include:
 
-- user names in local paths;
-- IP addresses of the headset and the PC;
-- the `Migration` field of the configuration, which records the absolute path of the earlier configuration file;
-- raw tracking data.
+- Steps to reproduce and observed vs. expected behavior
+- UnifiedPicoModule version and VRCFT version (e.g., `5.4.5` or Steam `6.0.0.0`)
+- Sender and version (e.g., `PicoFacialBridge 0.5.0`, `PICO Connect 10.6.6`)
+- Headset model (e.g., `PICO 4 Pro`)
+- Relevant lines from VRCFT's Output log, including the 5-second status and `CONSUMPTION` lines
+- For config issues: `UnifiedPicoModule.json` or the output of `UnifiedPicoConfigTool validate`
 
-Do not upload unfiltered full packet captures. If protocol evidence is needed, keep only the packet fields relevant to the issue.
+### Sanitize Logs and Configs First
 
-## Code requirements
+Before uploading any file or log, strip:
 
-### Layers
+- Windows usernames in local paths
+- Headset and PC LAN IP addresses
+- The `Migration` block in `UnifiedPicoModule.json` (contains old absolute paths)
+- Raw tracking dumps and unfiltered `.pcap`/`.pcapng` packet captures (keep only the specific fields relevant to the issue)
 
-The directories have the following responsibilities:
+## Architecture & Coding Expectations
 
-| Directory | Responsibility |
-|---|---|
-| `Core` | Input data, sessions and capabilities, module output model |
-| `Protocol`, `Transport` | Wire format parsing, source validation, connection and reception |
-| `Mapping` | Neutral mapping and eye data resolution |
-| `Processing` | Post-processing rules and their timing state |
-| `Configuration` | Configuration model, validation and migration |
-| `Runtime` | Source selection, scheduling, timeouts and diagnostics |
-| `Sdk` | VRCFT lifecycle and output |
+Keep the layer boundaries intact (full map in [docs/development.md](docs/development.md#architecture)):
 
-Changes must observe the following constraints:
+- **SDK isolation:** Only `Sdk/` may reference `VRCFaceTracking.*` or `Microsoft.Extensions.Logging`. `tools/ConfigTool` compiles only `Core/Contracts.cs` and `Configuration/*.cs`.
+- **Decoupled stages:** Protocol decoding (`Protocol/`), source selection (`Runtime/SourceCoordinator.cs`), eye resolution (`Mapping/EyeResolver.cs`), and post-processing (`Processing/PostProcessor.cs`) stay independent; changing one should not leak into another.
+- **Explicit configuration only:** `UnifiedPicoModule.json` is the sole source of module behavior. Do not add hidden runtime presets in code or rewrite a user's JSON automatically based on the active sender.
+- **Warnings as errors:** Match surrounding style and keep builds warning-free (`TreatWarningsAsErrors` is enabled). Add comments only where non-obvious constraints or protocol edge cases need explanation.
 
-- Only the `Sdk` directory may reference VRCFaceTracking. The other layers do not depend on VRCFT, and the configuration tool compiles only the sources in `Core` and `Configuration`.
-- Protocol parsing, source selection, eye resolution (gaze, openness and pupil) and post-processing are independent of one another. Changing one of them should not alter the behavior of the others.
-- The configuration file is the only basis for the module's behavior. Do not add hidden runtime presets in code, and do not rewrite user configuration automatically based on the data source.
+### Configuration Changes
 
-### Code style
+When adding, renaming, or changing a configuration field, range, or default:
 
-Keep consistent with the surrounding code, including naming, file organization and comment density. Use comments only to explain reasons or constraints that are not evident from the code itself.
+1. Update the model in `Configuration/` and validation rules in `Configuration/ConfigValidator.cs`.
+2. Update `Configuration/LegacyImporter.cs` if migration behavior is affected.
+3. Re-export `config/UnifiedPicoModule.example.json` using `UnifiedPicoConfigTool.dll defaults`.
+4. Update both English and Chinese configuration/post-processing docs.
+5. Note in the PR/commit description whether `ConfigVersion` needs to be incremented if existing field semantics changed.
 
-### Configuration changes
+## Testing & Verification
 
-When adding or changing a configuration field, its valid range or how it is calculated, update the following together:
+Run both the release build and the dual-host compatibility suite locally before opening a PR:
 
-- the model in `Configuration` and `ConfigValidator`;
-- the migration logic in `LegacyImporter`, if affected;
-- `config/UnifiedPicoModule.example.json`, re-exported with the `defaults` command of the configuration tool;
-- the documentation in both languages.
+```powershell
+./tools/build.ps1 -Configuration Release
+pwsh -NoProfile -File tools/test-compatibility.ps1
+```
 
-If a change alters the meaning of an existing field, state in the commit message whether `ConfigVersion` needs to be increased.
+In your PR or commit description:
 
-## Third-party code
+- List what you actually ran (build, compatibility tests, real-headset testing) and what remains unverified. A green build does not prove hardware or avatar compatibility.
+- Clearly label any sender/version combinations not verified on real hardware as unverified, and any uncalibrated coefficients as uncalibrated (never as recommended values). Current verified setups are listed in [docs/protocol.md](docs/protocol.md#verification-status).
 
-- Do not introduce code or assets with unclear licensing. SAFT (PicoStreamingAssistantFTUDP) and lonelyicer's VRCFTPicoModule have no clear license in the snapshots reviewed by this project; their implementations must not be copied, translated or rewritten.
-- When drawing on another project's protocol material or behavior, implement it independently and record the source and version in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-- When reusing third-party content with a clear license, record the source, exact version and file scope, and keep the applicable license and copyright notices.
+## Pull Request Checklist
 
-## Commit messages
-
-In the commit message, state the verification actually performed, such as builds, static checks or observations on a real headset, and list what remains unverified. A successful build does not mean device compatibility has been verified.
-
-The following must be marked accurately in code comments or documentation:
-
-- senders, versions or combinations that have not been verified on a real headset must be marked as unverified;
-- coefficients that have not been calibrated on a real headset must be marked as uncalibrated and must not be called recommended values.
-
-For the current verification status of each combination, see the [README](README.md#compatibility). If you have tested a combination that has not been verified yet, please open an issue with your log and results.
+- [ ] Clean-room rule followed; `THIRD_PARTY_NOTICES*.md` updated if new protocol references were consulted
+- [ ] `./tools/build.ps1 -Configuration Release` succeeds with zero warnings
+- [ ] `pwsh -NoProfile -File tools/test-compatibility.ps1` passes for both VRCFT 5.4.5 and Steam VRCFT 6
+- [ ] `config/UnifiedPicoModule.example.json` regenerated if defaults changed
+- [ ] English and Chinese docs updated together
+- [ ] Verified vs. unverified scope stated accurately in the PR description

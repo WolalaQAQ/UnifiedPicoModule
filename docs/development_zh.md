@@ -1,72 +1,74 @@
 # 开发说明
 
-[English](development.md) | 简体中文 · [README](../README_zh.md)
+[English](development.md) | 简体中文 · [README](../README_zh.md) · [协议参考](protocol_zh.md) · [参与贡献](../CONTRIBUTING_zh.md)
 
-本文说明 UnifiedPicoModule 的构建方式、打包内容、发布流程和代码结构。
+本文说明 UnifiedPicoModule 的构建、兼容测试、打包、发布流程以及分层代码结构。
 
 ## 环境要求
 
-- Windows 与 PowerShell
-- .NET 10 SDK
+- Windows 与 PowerShell（运行兼容测试建议使用 `pwsh` 7+）
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)（`net10.0`）
 - Git
-- 固定版本的 VRCFaceTracking 源码
+- 本地检出的固定版本 VRCFaceTracking 源码
 
-构建不依赖 Android 工具链或其他 PICO 项目。构建和打包脚本不会安装模块，不会向 VRCFT 的 `CustomLibs` 目录复制文件，也不会修改设备或串流软件的设置。
+构建不依赖 Android 工具链或其他 PICO 仓库。所有构建、测试和打包脚本都不会安装模块、不会向 VRCFT 的 `CustomLibs` 写入文件，也不会修改设备或串流软件设置。
 
-## 构建
+---
 
-### 准备 SDK 源码
+## 从源码构建
 
-模块基于 VRCFaceTracking 提交 `7add14873e398c4095d06913cdeee7a01fc43fab` 编译，对应程序集版本 `5.4.5.0`，目标框架 `net10.0`。在仓库根目录执行：
+### 1. 检出固定的 VRCFT SDK 源码
+
+UnifiedPicoModule 基于 VRCFaceTracking 提交 `7add14873e398c4095d06913cdeee7a01fc43fab`（程序集版本 `5.4.5.0`，目标框架 `net10.0`）编译。在仓库根目录执行：
 
 ```powershell
 git clone https://github.com/benaclejames/VRCFaceTracking.git .sdk/source/VRCFaceTracking
 git -C .sdk/source/VRCFaceTracking switch --detach 7add14873e398c4095d06913cdeee7a01fc43fab
 ```
 
-`.sdk/` 是本地缓存目录，已被 `.gitignore` 排除。
+`.sdk/` 为本地缓存目录，已在 `.gitignore` 中排除。
 
-### 运行构建脚本
+### 2. 运行构建脚本
 
 ```powershell
 ./tools/build.ps1 -Configuration Release
 ```
 
-`-Configuration` 可选 `Debug` 或 `Release`，默认为 `Release`。SDK 源码目录按以下顺序确定：
+- `-Configuration` 可选 `Debug` 或 `Release`（默认 `Release`）。
+- SDK 源码目录按以下顺序查找：`-SdkSource` 参数 → 环境变量 `VRCFT_SDK_SOURCE` → `.sdk/source/VRCFaceTracking`。
+- `tools/build.ps1` 不会自动下载源码；找不到目录时会直接报错退出。
 
-1. `-SdkSource` 参数；
-2. 环境变量 `VRCFT_SDK_SOURCE`；
-3. 仓库内的 `.sdk/source/VRCFaceTracking`。
+### `tools/build.ps1` 的校验与构建步骤
 
-脚本不会自动下载源码。找不到源码目录时，脚本直接报错退出。
+任一步失败都会立即中止：
 
-### 构建步骤
-
-`tools/build.ps1` 依次执行以下操作，任何一步失败都会终止构建：
-
-1. 确认源码目录的 `HEAD` 为上述固定提交。
-2. 确认源码目录中没有对已跟踪文件的修改。脚本不会丢弃或还原这些修改。
-3. 计算四个关键文件的 SHA256 指纹并与脚本中记录的值比对：`Directory.Build.props`、`Directory.Packages.props`、`VRCFaceTracking.SDK/ExtTrackingModule.cs` 和 `VRCFaceTracking.Core/Params/Expressions/UnifiedExpressions.cs`。计算前去掉 UTF-8 BOM，并将 CRLF 统一为 LF，因此 Git 换行设置不同不会导致误判。
-4. 以 Release 配置构建 `VRCFaceTracking.Core`，所有中间文件和输出都写入 `.sdk/build`，不写入 SDK 源码目录。
-5. 确认 `VRCFaceTracking.Core.dll` 与 `VRCFaceTracking.SDK.dll` 的程序集版本为 `5.4.5.0`，然后将两者复制到 `.sdk/`。
-6. 写入 `.sdk/sdk-provenance.json`，记录提交、程序集版本、目标框架、指纹归一化方式和四个文件的指纹。
-7. 构建模块项目 `UnifiedPicoModule.csproj`。
-8. 构建配置工具 `tools/ConfigTool/ConfigTool.csproj`。
-
-如需更换 SDK 版本，应同时更新脚本中的提交与指纹、`release.yml` 中的 `VRCFT_COMMIT`，以及 `UnifiedPicoModule.csproj` 中的版本检查，并将其作为一次独立的兼容性变更处理。
+1. 检查 `HEAD` 是否为 `7add14873e398c4095d06913cdeee7a01fc43fab`，且无已跟踪文件改动（`git status --porcelain --untracked-files=no`）。
+2. 对四个关键 API 文件归一化（去 UTF-8 BOM、CRLF 转 LF）后计算 SHA-256 并与脚本内置指纹比对：
+   - `Directory.Build.props`
+   - `Directory.Packages.props`
+   - `VRCFaceTracking.SDK/ExtTrackingModule.cs`
+   - `VRCFaceTracking.Core/Params/Expressions/UnifiedExpressions.cs`
+3. 以 `Release` 配置构建 `VRCFaceTracking.Core`，中间文件与产物输出到 `--artifacts-path .sdk/build`，不污染 SDK 源码树。
+4. 校验 `VRCFaceTracking.Core.dll` 与 `VRCFaceTracking.SDK.dll` 的程序集版本为 `5.4.5.0`，复制到 `.sdk/` 并写入 `.sdk/sdk-provenance.json`。
+5. 依次构建 `UnifiedPicoModule.csproj` 和 `tools/ConfigTool/ConfigTool.csproj`。
 
 ### 构建产物
 
 | 产物 | 路径 |
 |---|---|
-| 模块 | `bin/<Configuration>/net10.0/UnifiedPicoModule.dll` |
-| 配置工具 | `tools/ConfigTool/bin/<Configuration>/net10.0/UnifiedPicoConfigTool.dll` |
-| SDK 程序集 | `.sdk/VRCFaceTracking.Core.dll`、`.sdk/VRCFaceTracking.SDK.dll` |
+| 模块程序集 | `bin/<Configuration>/net10.0/UnifiedPicoModule.dll` |
+| 配置命令行工具 | `tools/ConfigTool/bin/<Configuration>/net10.0/UnifiedPicoConfigTool.dll` |
+| SDK 引用程序集 | `.sdk/VRCFaceTracking.Core.dll`、`.sdk/VRCFaceTracking.SDK.dll` |
 | SDK 来源记录 | `.sdk/sdk-provenance.json` |
 
-### 宿主兼容检查
+> [!NOTE]
+> 更换固定 SDK 版本时，必须同步更新 `tools/build.ps1` 中的提交号和四项 SHA-256 指纹、`.github/workflows/release.yml` 中的 `VRCFT_COMMIT` 以及 `UnifiedPicoModule.csproj` 的 `CheckSdk` 版本检查，并作为独立的兼容性变更提交。
 
-运行时测试使用官方5.4.5编译源码，以及另行检出的Steam 6提交`3d36379253d26961560d84acecd01d509aea467a`：
+---
+
+## 运行宿主兼容测试
+
+兼容测试套件将同一份按 5.4.5 SDK 编译的 `UnifiedPicoModule.dll` 加载到两个独立隔离进程——官方 VRCFT 5.4.5 与 Steam VRCFT 6（`3d36379253d26961560d84acecd01d509aea467a`）——检验解码器、管线、IPC 与 OSC 输出，不接触 GUI、正式追踪端口或用户配置。
 
 ```powershell
 git clone https://github.com/benaclejames/VRCFaceTracking.git .sdk/compat/source/vrcft6-steam
@@ -74,43 +76,9 @@ git -C .sdk/compat/source/vrcft6-steam switch --detach 3d36379253d26961560d84ace
 pwsh -NoProfile -File tools/test-compatibility.ps1
 ```
 
-测试使用私有配置目录与合成输入，让同一模块DLL通过两版宿主。`-ModuleDll`可指定已有DLL；`-InstalledHostDir`可在隔离输出中使用匹配的Steam组件。详见[测试说明](../tools/CompatibilityTests/README.md)，不使用GUI、正式追踪端口或用户设置。
+可通过 `-ModuleDll` 指定已有 DLL，或通过 `-InstalledHostDir` 在隔离输出中使用匹配的 Steam 安装组件。详细用例与参数见 [tools/CompatibilityTests/README_zh.md](../tools/CompatibilityTests/README_zh.md)。
 
-## 项目文件
-
-### UnifiedPicoModule.csproj
-
-- 目标框架 `net10.0`，启用可空引用类型和隐式 using，所有警告视为错误。
-- 版本号由 `Version` 属性指定，当前为 `0.4.1`。
-- 通过 `HintPath` 引用 `$(VrcftSdkDir)` 下的 `VRCFaceTracking.SDK.dll` 和 `VRCFaceTracking.Core.dll`，并设置 `Private=false`，因此这两个 DLL 不会复制到输出目录。`VrcftSdkDir` 默认为仓库内的 `.sdk`，也可以通过 MSBuild 属性覆盖。
-- `CheckSdk` 目标在解析引用前检查这两个 DLL 是否存在，并要求程序集版本为 `5.4.5.0`。
-- 引用 `Microsoft.Extensions.Logging.Abstractions` 10.0.1，设置为 `PrivateAssets="all"`。
-- 从编译中排除 `tools/`、`.sdk/`、`artifacts/`、`docs/` 和 `reference/` 下的源文件。
-- 将 `assets/branding/module-icon.png` 作为嵌入资源，逻辑名为 `UnifiedPicoModule.Branding.ModuleIcon.png`，用作模块列表中的图标。
-
-### Directory.Build.props
-
-通过 `PathMap` 将项目目录映射为 `/_/UnifiedPicoModule/`，编译产物中记录的源文件路径因此不包含构建机的本地目录。该设置同时作用于模块和配置工具。
-
-### tools/ConfigTool/ConfigTool.csproj
-
-配置工具是一个独立的控制台程序，程序集名为 `UnifiedPicoConfigTool`，目标框架 `net10.0`。项目关闭了默认编译项，只编译 `Program.cs`，并以链接方式引入 `Core/Contracts.cs` 和 `Configuration/*.cs`。配置工具不引用 VRCFT SDK，配置的读取、校验和迁移逻辑与模块共用同一份源码。
-
-配置工具提供 `validate`、`defaults` 和 `import` 三个命令，用法请参阅[配置工具说明](../tools/ConfigTool/README_zh.md)。
-
-### module.json
-
-VRCFT 读取的模块元数据，包含以下字段：
-
-| 字段 | 当前值或说明 |
-|---|---|
-| `ModuleId` | `8322e16d-c38b-42f0-8d35-68f27227b442`，同时决定模块在 `CustomLibs` 下的目录名 |
-| `Version` | `0.4.1`，必须与 `UnifiedPicoModule.csproj` 中的版本一致 |
-| `ModuleName` | `Unified PICO Face Tracking` |
-| `ModuleDescription` / `UsageInstructions` | 模块列表中显示的说明文字 |
-| `DownloadUrl` | 当前为空 |
-| `ModulePageUrl` | 项目的 GitHub 仓库地址 |
-| `DllFileName` | `UnifiedPicoModule.dll` |
+---
 
 ## 打包
 
@@ -118,134 +86,138 @@ VRCFT 读取的模块元数据，包含以下字段：
 ./tools/package.ps1
 ```
 
-脚本默认先调用 `tools/build.ps1 -Configuration Release`，并接受同样的 `-SdkSource` 参数和 `VRCFT_SDK_SOURCE` 环境变量。指定 `-SkipBuild` 时跳过构建，直接使用已有的 Release 产物，此时无法保证这些产物与当前源码一致。
+脚本默认先执行 `tools/build.ps1 -Configuration Release`（支持相同的 `-SdkSource` 参数与 `VRCFT_SDK_SOURCE` 环境变量）。传入 `-SkipBuild` 可跳过构建直接使用已有 Release 产物。
 
-### ModulePageUrl 检查
+### 打包前校验
 
-打包前，脚本要求 `module.json` 中的 `ModulePageUrl` 是非空的绝对 URI，协议为 `http`、`https` 或 `file`，否则拒绝打包。原因是 VRCFT 5.4.5 将该字段直接绑定到 `HyperlinkButton.NavigateUri`，在实机验证中，空字符串和 `null` 都会导致 Module Registry 页面崩溃。本地实验性构建可以使用占位地址，但正式发布应使用项目的实际页面地址。
+- **`ModulePageUrl` 检查：** `module.json` 中的 `ModulePageUrl` 必须为非空的 `http`、`https` 或 `file` 绝对 URI。VRCFT 5.4.5 会将该字段直接绑定到 `HyperlinkButton.NavigateUri`，空字符串或 `null` 会导致 Module Registry 页面崩溃。
+- **全新默认配置：** 脚本调用 `UnifiedPicoConfigTool.dll defaults` 导出干净的 `UnifiedPicoModule.json` 与 `config/UnifiedPicoModule.example.json`，绝不读取或打包开发者本机的运行时配置文件。
 
-### 包内容
+### 包目录结构
 
-模块包为扁平结构，根目录即模块目录，包含以下内容：
+每次打包在 `artifacts/` 下生成不覆盖旧产物的 `stage-<yyyyMMdd-HHmmss-fff>/`、`UnifiedPicoModule-<Version>-<timestamp>.zip` 及对应 `.zip.sha256`。所有文件按显式白名单逐个复制（不递归复制 `docs/`）：
 
-- `UnifiedPicoModule.dll`
-- `module.json`
-- `UnifiedPicoModule.json`：由配置工具的 `defaults` 命令从配置模型导出的默认配置
-- `config/UnifiedPicoModule.example.json`：与上述默认配置内容相同
-- `sdk-provenance.json`
-- `README.md`、`README_zh.md`、`CHANGELOG.md`、`CHANGELOG_zh.md`、`CONTRIBUTING.md`、`CONTRIBUTING_zh.md`、`THIRD_PARTY_NOTICES.md`、`THIRD_PARTY_NOTICES_zh.md`、`LICENSE`
-- `docs/` 下的配置说明、后处理参考、协议参考、开发说明、隐私与网络安全，各含中英文版本
-- `tools/ConfigTool/README.md`、`tools/ConfigTool/README_zh.md`
-- `assets/branding/` 下的 `logo-dark`、`logo-light`、`module-icon` 三组图标，各含 SVG 与 PNG
+- `UnifiedPicoModule.dll`、`module.json`、`sdk-provenance.json`
+- `UnifiedPicoModule.json` 与 `config/UnifiedPicoModule.example.json`
+- 根目录文档与许可：`README.md`、`README_zh.md`、`CHANGELOG.md`、`CHANGELOG_zh.md`、`CONTRIBUTING.md`、`CONTRIBUTING_zh.md`、`THIRD_PARTY_NOTICES.md`、`THIRD_PARTY_NOTICES_zh.md`、`LICENSE`
+- `docs/` 下五组中英文公开文档：`configuration`、`postprocessing`、`protocol`、`development`、`privacy`
+- `tools/ConfigTool/README.md` 与 `tools/ConfigTool/README_zh.md`
+- `assets/branding/`：`logo-dark`、`logo-light`、`module-icon`（各含 SVG 与 PNG）
 
-所有文件都按白名单逐个复制，`docs/` 目录不会被递归复制。默认配置始终重新导出，不读取开发者本机的 `UnifiedPicoModule.json`。包内不包含 VRCFaceTracking 的 DLL、SDK 源码、配置工具程序和 PDB 文件。
+模块 ZIP 不包含 VRCFaceTracking DLL、SDK 源码、ConfigTool 可执行文件或 PDB 调试符号。
 
-### 输出文件
+---
 
-每次打包都会在 `artifacts/` 下生成一个以时间戳命名的暂存目录 `stage-<yyyyMMdd-HHmmss-fff>`，以及：
+## 项目文件与默认配置
 
-- `UnifiedPicoModule-<Version>-<yyyyMMdd-HHmmss-fff>.zip`
-- 同名的 `.zip.sha256`，内容为 `<SHA256>  <文件名>`
+### `UnifiedPicoModule.csproj` 与 `Directory.Build.props`
 
-文件名中的时间戳使每次打包的输出互不覆盖。脚本不会清理以前的输出，需要时可手动删除 `artifacts/` 下的旧文件。
+- 目标框架 `net10.0`，开启 `<Nullable>enable</Nullable>`、`<ImplicitUsings>enable</ImplicitUsings>` 和 `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`。
+- 从 `$(VrcftSdkDir)`（默认 `.sdk`）引用 `VRCFaceTracking.SDK.dll` 和 `VRCFaceTracking.Core.dll` 并设为 `Private="false"`，不复制到输出目录；`CheckSdk` 目标在解析引用前强制校验程序集版本为 `5.4.5.0`。
+- 引用 `Microsoft.Extensions.Logging.Abstractions` `10.0.1`（`PrivateAssets="all"`）。
+- 从编译中排除 `tools/`、`.sdk/`、`artifacts/`、`docs/` 和 `reference/`。
+- 将 `assets/branding/module-icon.png` 嵌入为 `UnifiedPicoModule.Branding.ModuleIcon.png`，供 VRCFT 模块列表离线显示图标。
+- `Directory.Build.props` 通过 `<PathMap>$(MSBuildThisFileDirectory)=/_/UnifiedPicoModule/</PathMap>` 消除模块与配置工具编译产物中的本机路径信息。
 
-## 发布
+### `tools/ConfigTool/ConfigTool.csproj`
 
-`.github/workflows/release.yml` 在向 GitHub 推送以 `v` 开头的标签时运行。普通的分支推送和 Pull Request 不会触发该流程。
+独立控制台项目，程序集名 `UnifiedPicoConfigTool`（`net10.0`），关闭默认编译项，仅编译 `Program.cs` 并链接 `Core/Contracts.cs` 与 `Configuration/*.cs`。它不依赖 VRCFaceTracking，与运行时模块共用同一套配置读取、校验和迁移代码。用法见[配置工具说明](../tools/ConfigTool/README_zh.md)。
 
-### 发布前的准备
-
-1. 将 `module.json` 和 `UnifiedPicoModule.csproj` 中的 `Version` 设为同一版本号，不带 `v` 前缀。
-2. `Sdk/UnifiedPicoTrackingModule.cs` 中的启动日志以字面量写出了版本号，需要一并修改。
-3. 将 `module.json` 中的 `ModulePageUrl` 设为项目的实际页面地址。
-4. 提交并推送上述修改，然后为该提交创建并推送标签：
+修改 `Configuration/ModuleConfig.cs` 或 `Configuration/PostProcessingSettings.cs` 的默认值后，使用以下命令导出新默认配置并核对 `config/UnifiedPicoModule.example.json`：
 
 ```powershell
-git tag -a v0.4.0 -m "UnifiedPicoModule 0.4.0"
-git push origin v0.4.0
+dotnet tools/ConfigTool/bin/Release/net10.0/UnifiedPicoConfigTool.dll defaults <新输出路径.json>
 ```
 
-标签格式为 `vMAJOR.MINOR.PATCH`，可以附加 SemVer 预发布后缀，例如 `v0.4.0-rc.1`。不接受 `+build` 构建元数据，数字部分和数字型预发布标识不允许前导零。
+（`defaults` 不会覆盖已有文件。）
 
-### 构建任务
+### `module.json`
 
-构建任务在 `windows-latest` 上运行，权限为 `contents: read`，依次执行：
+| 字段 | 当前值与作用 |
+|---|---|
+| `ModuleId` | `8322e16d-c38b-42f0-8d35-68f27227b442`（决定 `CustomLibs` 下的安装目录名） |
+| `Version` | `0.4.1`（必须与 `UnifiedPicoModule.csproj` 及 Git 标签一致） |
+| `ModuleName` | `Unified PICO Face Tracking` |
+| `ModuleDescription` / `UsageInstructions` | VRCFT 模块注册表中显示的说明文字 |
+| `DownloadUrl` | 空字符串 `""` |
+| `ModulePageUrl` | `https://github.com/WolalaQAQ/UnifiedPicoModule` |
+| `DllFileName` | `UnifiedPicoModule.dll` |
 
-1. 检出仓库，不保留凭据。
-2. 校验标签格式，并确认标签版本与 `module.json`、`UnifiedPicoModule.csproj` 中的版本完全一致。
-3. 安装 .NET 10 SDK。
-4. 将 VRCFaceTracking 的固定提交检出到 `.sdk/source/VRCFaceTracking`。该提交记录在工作流的 `VRCFT_COMMIT` 环境变量中，`tools/build.ps1` 会再次独立校验。
-5. 运行 `tools/package.ps1 -SdkSource .sdk/source/VRCFaceTracking`，再检出独立的Steam 6固定源码，用打包的DLL通过两版宿主兼容检查。
-6. 检查生成的 ZIP：路径中不得出现 `agents`、`archive`、`private`、`.sdk`、`bin`、`obj` 目录，或包含 `migration`、`current-settings` 的名称，不得包含 `.log`、`.pcap`、`.pcapng`、`.har`、`.pdb` 文件，除 `UnifiedPicoModule.dll` 外不得包含其他 DLL。包内的默认配置中 `Bridge.IP`、`Streaming.IP` 和 `Migration` 必须为空，且 `PostProcessing` 下除 `ChannelGain` 外不得有 `Enabled` 为 `true` 的规则。
-7. 将 ZIP 复制为不带时间戳的 `UnifiedPicoModule-<version>.zip`，重新计算 SHA256，并生成 `.zip.sha256`。
-8. 将这两个文件作为工作流产物上传，保留 14 天。
+---
 
-### 发布任务
+## 代码架构
 
-发布任务在构建任务成功后运行于 `ubuntu-latest`，权限为 `contents: write`，使用 GitHub 自动提供的 `GITHUB_TOKEN`。它下载两个文件并用 `sha256sum --check --strict` 校验，然后以草稿形式创建Release、上传附件，取中英文更新日志中匹配版本的段落作为正文，最后将草稿设为公开。标签带预发布后缀时，Release标记为prerelease。
+### 运行时管线与 SDK 边界
 
-使用该流程时需要注意：
+```mermaid
+flowchart LR
+    UDP["UDP 套接字<br/>:9030 / :29765 / :29763"] --> Transport["Transport/<br/>BridgeUdpSource 与<br/>StreamingUdpSource"]
+    Transport <--> Protocol["Protocol/<br/>解码器与 BridgeControl"]
+    Transport -- "不可变 SourceSnapshot" --> Coord["Runtime/<br/>SourceCoordinator"]
+    Coord --> Pipe["Runtime/<br/>TrackingPipeline"]
+    Pipe --> Map["Mapping/<br/>NeutralFaceMapper 与<br/>EyeResolver"]
+    Map --> Proc["Processing/<br/>PostProcessor"]
+    Proc -- "TrackingOutput" --> Sdk["Sdk/<br/>UnifiedPicoTrackingModule"]
+    Sdk -- "UnifiedTracking.Data" --> VRCFT["VRCFaceTracking<br/>5.4.5 / 6.0"]
 
-- 已存在同名 Release 时，创建步骤会失败，流程不会覆盖已有 Release。
-- 上传完成但公开步骤失败时，会留下一个未公开的草稿，需要手动处理。
-- 由 `GITHUB_TOKEN` 推送的标签不会触发工作流，这是 GitHub 防止递归运行的机制。
-- 工作流中使用的所有 Action 都固定到完整的提交 SHA。
-
-## 代码结构
-
-```
-Core/            共享类型与数据契约
-Protocol/        线格式解码与控制报文
-Transport/       UDP 接收、对端锁定与来源校验
-Mapping/         表情映射与视线解析
-Processing/      表情后处理
-Configuration/   配置模型、读取、校验与迁移
-Runtime/         数据源选择、处理管线与诊断
-Sdk/             VRCFT 模块入口
-tools/           构建与打包脚本、配置工具
-config/          默认配置样例
-assets/branding/ 图标与标志
-docs/            公开文档
+    Core["Core/ 与 Configuration/<br/>（零 SDK 依赖）"] -.-> Transport
+    Core -.-> Pipe
+    Core -.-> Sdk
 ```
 
-`reference/` 是只读的第三方源码快照，已被 `.gitignore` 排除，不参与编译，也不会打包。
-
-### 各层职责
+### 仓库目录职责
 
 | 目录 | 职责 |
 |---|---|
-| `Core` | 枚举（数据源、协议、连接状态、PICO 表情、模块输出通道等）、单调时钟、原始眼动与面部数据、数据源快照和模块输出模型。数据源快照为不可变对象 |
-| `Protocol` | 四种线格式的解码器：`BridgeSplitDecoder`、`DaemonLegacyDecoder`、`Header16Decoder` 和 `BodyOnlyDecoder`，以及 Bridge 控制报文的生成与解析（`BridgeControl`） |
-| `Transport` | `UdpTrackingSource` 负责套接字绑定、后台接收线程、时间戳去重、丢包计数和日志限流。`BridgeUdpSource` 实现 9030 端口的发现、心跳、通道订阅与对端锁定，`StreamingUdpSource` 实现 29765 和 29763 端口的接收与本机来源限制 |
-| `Mapping` | `NeutralFaceMapper` 将 PICO 表情映射为模块输出通道，`EyeResolver` 由 `EyeLook` 形态推算每眼视线、由 `1 - EyeBlink` 得到睁眼度，并解析实测瞳孔直径 |
-| `Processing` | `PostProcessor` 按固定顺序执行可选的后处理规则，并维护规则所需的时间状态 |
-| `Configuration` | `ModuleConfig` 与 `PostProcessingSettings` 定义配置模型及默认值，`ConfigStore` 负责读取和写入，`ConfigValidator` 负责校验和回退，`LegacyImporter` 负责旧配置的只读迁移 |
-| `Runtime` | `SourceCoordinator` 创建数据源并选定其中一个，`TrackingPipeline` 将选定的快照转换为输出并处理数据过期，`DiagnosticReporter` 每 5 秒输出状态日志 |
-| `Sdk` | `UnifiedPicoTrackingModule` 继承 VRCFT 的 `ExtTrackingModule`，实现初始化、更新与清理 |
+| `Core/` | 共享枚举（`SourceKind`、`InputProtocol`、`PicoShape`、`ExpressionChannel` 等）、`MonotonicClock`、`RawEye`、`RawFace`、`IndependentEyeExpression`、不可变 `SourceSnapshot` 与 `TrackingOutput` |
+| `Protocol/` | 四种线格式解码器（`BridgeSplitDecoder`、`DaemonLegacyDecoder`、`Header16Decoder`、`BodyOnlyDecoder`）、`WireFields` 与 Bridge 控制报文工具（`BridgeControl`） |
+| `Transport/` | `UdpTrackingSource`（排他套接字、后台接收线程、分组时间戳去重、丢包计数与日志限流）、`BridgeUdpSource`（9030 发现/心跳/订阅/锁定）与 `StreamingUdpSource`（29765/29763、`LocalOnly`） |
+| `Mapping/` | `NeutralFaceMapper`（PICO 形态 → `ExpressionChannel`）与 `EyeResolver`（`EyeLook` 视线、`1 - EyeBlink` 睁眼度、实测瞳孔） |
+| `Processing/` | `PostProcessor`（按固定顺序执行的可选后处理规则，及 `CheekAsymmetry`/`TongueHold` 的时间状态） |
+| `Configuration/` | `ModuleConfig`、`PostProcessingSettings`、`ConfigStore`、`ConfigValidator` 及只读迁移器 `LegacyImporter` |
+| `Runtime/` | `SourceCoordinator`（数据源创建与粘性选择）、`TrackingPipeline`（过期判定、分组时钟与映射/后处理编排）、`DiagnosticReporter`（每 5 秒日志）与 `ConsumptionDiagnostics` |
+| `Sdk/` | `UnifiedPicoTrackingModule`（`ExtTrackingModule` 生命周期、Windows 后台定时策略及唯一的 `UnifiedTracking.Data` 写入边界） |
+| `tools/` | `build.ps1`、`package.ps1`、`test-compatibility.ps1`、`ConfigTool/` 与 `CompatibilityTests/` |
+| `config/` | `UnifiedPicoModule.example.json` |
+| `assets/branding/` | 标志与内嵌模块图标（SVG 与 PNG） |
+| `docs/` | 公开中英文文档 |
 
-### SDK 边界
+`reference/` 为本地只读参考快照目录，已由 `.gitignore` 排除，不参与编译与打包。
 
-只有 `Sdk` 目录引用 VRCFaceTracking 和 `Microsoft.Extensions.Logging`，其他各层不引用任何 SDK 类型。各层之间通过 `Core` 中的类型交换数据，模块输出通道 `ExpressionChannel` 在 `Sdk` 层按名称转换为 VRCFT 的 `UnifiedExpressions`。
+### 关键架构约束
 
-`UnifiedPicoTrackingModule.Write` 是唯一写入 `UnifiedTracking.Data` 的位置。它只写入模块已获得的输出：宿主未分配眼动输出，或配置中禁用了眼动时，不写入眼动通道和视线数据；面部同理。
+- **严格 SDK 边界：** 仅 `Sdk/` 目录引用 `VRCFaceTracking.*` 与 `Microsoft.Extensions.Logging`。其他各层仅通过 `Core/` 类型交互，`ExpressionChannel` 在 `Sdk/` 加载时按名称映射为 `UnifiedExpressions`。
+- **单一写入边界：** `UnifiedPicoTrackingModule.Write` 是唯一写入 `UnifiedTracking.Data` 的位置，且只写入本模块拥有的通道（`ownsEye`、`ownsFace`），不覆写混搭模式下其他模块的通道。
+- **非阻塞采集：** UDP 轮询在独立后台线程运行并发布不可变 `SourceSnapshot`。`Update()` 读取最新快照、计算输出、写入 SDK、每 5 秒输出状态日志，并在末尾休眠 `2 ms`。
 
-### 运行时数据流
+---
 
-1. 每个数据源在独立的后台线程中接收 UDP 数据，解码并校验后，将结果发布为新的不可变快照。网络操作不在 VRCFT 的初始化或更新线程中执行。
-2. VRCFT 每次调用 `Update` 时，`SourceCoordinator` 读取各数据源的最新快照并确定选用的数据源。
-3. `TrackingPipeline` 依次完成过期判断、表情映射、视线解析和后处理，生成 `TrackingOutput`。
-4. `Sdk` 层将输出写入 `UnifiedTracking`，并调用 `DiagnosticReporter` 输出状态日志。每次 `Update` 结束时休眠 2 ms。
+## 发布流程
 
-## 默认配置
+向 GitHub 推送 `v*` 标签会触发 `.github/workflows/release.yml`；普通分支推送与 PR 不会触发。
 
-默认值定义在 `Configuration/ModuleConfig.cs` 和 `Configuration/PostProcessingSettings.cs` 中。`config/UnifiedPicoModule.example.json` 应与配置模型导出的结果保持一致。修改默认值后，可以使用配置工具导出新的默认配置并与样例对照：
+### 发布前检查清单
+
+1. 在 `module.json` 和 `UnifiedPicoModule.csproj` 中将 `Version` 设为相同版本号（不含 `v` 前缀）。
+2. 同步更新 `Sdk/UnifiedPicoTrackingModule.cs` 启动日志中的版本号字面量。
+3. 在 `CHANGELOG.md` 和 `CHANGELOG_zh.md` 中**同时**添加对应的 `## [<version>]` 段落（缺任一份发布任务都会失败）。
+4. 确认 `module.json` 的 `ModulePageUrl` 为仓库地址，且 `config/UnifiedPicoModule.example.json` 与 `UnifiedPicoConfigTool.dll defaults` 输出一致。
+5. 在本地执行 `./tools/package.ps1` 与 `pwsh -NoProfile -File tools/test-compatibility.ps1` 并确认通过。
+6. 提交、推送后，创建并推送带注释的 SemVer 标签（`vMAJOR.MINOR.PATCH`，可附 `-prerelease`，不接受 `+build` 元数据与前导零）：
 
 ```powershell
-dotnet tools/ConfigTool/bin/Release/net10.0/UnifiedPicoConfigTool.dll defaults <输出路径.json>
+git tag -a v0.4.1 -m "UnifiedPicoModule 0.4.1"
+git push origin v0.4.1
 ```
 
-该命令不会覆盖已有文件，输出路径需要是尚不存在的文件。
+### CI 流水线概览
 
-## 参与开发
-
-参与方式请参阅[参与贡献](../CONTRIBUTING_zh.md)。构建通过只表示代码可以编译，与设备、发送端版本或 Avatar 的兼容性需要另行在真机上确认。
+1. **`build` 任务（`windows-latest`，`contents: read`）：**
+   - 校验标签格式及与 `module.json`、`UnifiedPicoModule.csproj` 版本的一致性。
+   - 检出固定 VRCFT 5.4.5 源码（`VRCFT_COMMIT`）并执行 `./tools/package.ps1`。
+   - 检出固定 Steam VRCFT 6 源码，对刚构建的 DLL 运行 `./tools/test-compatibility.ps1`。
+   - 审计 ZIP 内容：拦截禁用路径（`agents`、`archive`、`private`、`.sdk`、`bin`、`obj`、`migration`、`current-settings`）、禁用扩展名（`.log`、`.pcap`、`.pcapng`、`.har`、`.pdb`）、除 `UnifiedPicoModule.dll` 外的其他 DLL、非空的 `Bridge.IP` / `Streaming.IP` / `Migration`，以及 `PostProcessing` 下除 `ChannelGain` 外任何 `Enabled = true` 的规则。
+   - 生成无时间戳的 `UnifiedPicoModule-<version>.zip` 与 `.zip.sha256` 并上传为工作流产物（保留 14 天）。
+2. **`publish` 任务（`ubuntu-latest`，`contents: write`）：**
+   - 下载产物并执行 `sha256sum --check --strict`，提取 `CHANGELOG.md` 与 `CHANGELOG_zh.md` 对应版本段落，以草稿创建 GitHub Release（预发布标签自动标记 prerelease）、上传附件后再设为公开。
+   - 同名 Release 已存在时不会覆盖；所有 GitHub Actions 均固定到完整提交 SHA；通过 `GITHUB_TOKEN` 推送的标签不会触发工作流。
